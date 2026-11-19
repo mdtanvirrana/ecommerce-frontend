@@ -1,0 +1,315 @@
+import { apiRequest } from "@/lib/apiClient";
+import type {
+  CartSummary,
+  Category,
+  CheckoutResponse,
+  Coupon,
+  Customer,
+  DashboardData,
+  Order,
+  OrderStatus,
+  Permission,
+  Product,
+  ProductDetailPayload,
+  Role,
+  Staff,
+} from "@/types/api";
+
+// ============ Public Catalog ============
+export const catalogApi = {
+  getProducts: (params?: Record<string, string | number | boolean | undefined>) =>
+    apiRequest<Product[]>("products", { params }),
+
+  getProductBySlug: (slug: string) =>
+    apiRequest<ProductDetailPayload>(`products/${encodeURIComponent(slug)}`),
+
+  getCategories: () => apiRequest<Category[]>("categories"),
+
+  getCategoryBySlug: (slug: string) =>
+    apiRequest<Category>(`categories/${encodeURIComponent(slug)}`),
+
+  validateCoupon: (code: string, subtotal?: number) =>
+    apiRequest<{
+      code: string;
+      type: "percentage" | "fixed";
+      value: string;
+      subtotal: string;
+      discount_amount: string;
+      final_subtotal: string;
+    }>("coupons/validate", {
+      method: "POST",
+      body: { code, subtotal },
+    }),
+};
+
+// ============ Customer Auth ============
+export const customerAuthApi = {
+  register: (payload: {
+    name: string;
+    email: string;
+    phone?: string;
+    password: string;
+    password_confirmation: string;
+  }) =>
+    apiRequest<{ user: Customer }>("", {
+      method: "POST",
+      directUrl: "/api/auth/register",
+      body: payload,
+    }),
+
+  login: (payload: { email: string; password: string }) =>
+    apiRequest<{ user: Customer }>("", {
+      method: "POST",
+      directUrl: "/api/auth/login",
+      body: payload,
+    }),
+
+  logout: () =>
+    apiRequest<null>("", {
+      method: "POST",
+      directUrl: "/api/auth/logout",
+    }),
+
+  me: () => apiRequest<Customer>("me"),
+
+  updateProfile: (payload: { name: string; email?: string; phone?: string }) =>
+    apiRequest<Customer>("me", { method: "PATCH", body: payload }),
+
+  forgotPassword: (email: string) =>
+    apiRequest<null>("password/forgot", { method: "POST", body: { email } }),
+
+  resetPassword: (payload: {
+    token: string;
+    email: string;
+    password: string;
+    password_confirmation: string;
+  }) => apiRequest<null>("password/reset", { method: "POST", body: payload }),
+};
+
+// ============ Customer Cart & Checkout & Orders ============
+export const cartApi = {
+  getCart: () => apiRequest<CartSummary>("cart"),
+
+  addItem: (payload: {
+    product_id: number;
+    quantity: number;
+    selected_color?: string | null;
+    selected_size?: string | null;
+  }) => apiRequest<CartSummary>("cart/items", { method: "POST", body: payload }),
+
+  updateItem: (id: number, quantity: number) =>
+    apiRequest<CartSummary>(`cart/items/${id}`, {
+      method: "PATCH",
+      body: { quantity },
+    }),
+
+  removeItem: (id: number) =>
+    apiRequest<CartSummary>(`cart/items/${id}`, { method: "DELETE" }),
+
+  mergeGuestCart: (
+    items: Array<{
+      product_id: number;
+      quantity: number;
+      selected_color?: string | null;
+      selected_size?: string | null;
+    }>,
+  ) => apiRequest<CartSummary>("cart/merge", { method: "POST", body: { items } }),
+
+  applyCoupon: (code: string) =>
+    apiRequest<CartSummary>("cart/coupon", { method: "POST", body: { code } }),
+
+  removeCoupon: () =>
+    apiRequest<CartSummary>("cart/coupon", { method: "DELETE" }),
+};
+
+export const checkoutApi = {
+  checkout: (payload: {
+    shipping_full_name: string;
+    shipping_email: string;
+    shipping_phone: string;
+    shipping_address: string;
+    shipping_city: string;
+    shipping_postal_code: string;
+    delivery_instructions?: string;
+    coupon_code?: string;
+  }) => apiRequest<CheckoutResponse>("checkout", { method: "POST", body: payload }),
+
+  retryPayment: (orderId: number) =>
+    apiRequest<CheckoutResponse>(`orders/${orderId}/retry-payment`, {
+      method: "POST",
+    }),
+
+  confirmPayment: (orderId: number) =>
+    apiRequest<Order>(`orders/${orderId}/confirm-payment`, {
+      method: "POST",
+    }),
+
+  getOrders: (page = 1) =>
+    apiRequest<Order[]>("orders", { params: { page, per_page: 10 } }),
+
+  getOrder: (id: number | string) => apiRequest<Order>(`orders/${id}`),
+};
+
+// ============ Admin Auth ============
+export const adminAuthApi = {
+  login: (payload: { email: string; password: string }) =>
+    apiRequest<{ staff: Staff }>("", {
+      method: "POST",
+      directUrl: "/api/admin-auth/login",
+      body: payload,
+    }),
+
+  logout: () =>
+    apiRequest<null>("", {
+      method: "POST",
+      directUrl: "/api/admin-auth/logout",
+    }),
+
+  me: () => apiRequest<Staff>("admin/me"),
+
+  updateProfile: (payload: { name: string; email: string; phone?: string }) =>
+    apiRequest<Staff>("admin/profile", { method: "PATCH", body: payload }),
+
+  updatePassword: (payload: {
+    current_password: string;
+    password: string;
+    password_confirmation: string;
+  }) => apiRequest<null>("admin/profile/password", { method: "PUT", body: payload }),
+
+  forgotPassword: (email: string) =>
+    apiRequest<null>("admin/password/forgot", { method: "POST", body: { email } }),
+
+  resetPassword: (payload: {
+    token: string;
+    email: string;
+    password: string;
+    password_confirmation: string;
+  }) => apiRequest<null>("admin/password/reset", { method: "POST", body: payload }),
+};
+
+// ============ Admin Modules ============
+export const adminApi = {
+  getDashboard: () => apiRequest<DashboardData>("admin/dashboard"),
+
+  // Products
+  getProducts: (params?: Record<string, string | number | boolean | undefined>) =>
+    apiRequest<Product[]>("admin/products", { params }),
+
+  getProduct: (id: number) => apiRequest<Product>(`admin/products/${id}`),
+
+  createProduct: (formData: FormData) =>
+    apiRequest<Product>("admin/products", {
+      method: "POST",
+      body: formData,
+      isFormData: true,
+    }),
+
+  updateProduct: (id: number, formData: FormData) =>
+    apiRequest<Product>(`admin/products/${id}`, {
+      method: "POST",
+      body: formData,
+      isFormData: true,
+    }),
+
+  updateStock: (id: number, stock_quantity: number, notes?: string) =>
+    apiRequest<Product>(`admin/products/${id}/stock`, {
+      method: "PATCH",
+      body: { stock_quantity, notes },
+    }),
+
+  deleteProductImage: (productId: number, imageId: number) =>
+    apiRequest<Product>(`admin/products/${productId}/images/${imageId}`, {
+      method: "DELETE",
+    }),
+
+  deleteProduct: (id: number) =>
+    apiRequest<null>(`admin/products/${id}`, { method: "DELETE" }),
+
+  // Categories
+  getCategories: (flat = false) =>
+    apiRequest<Category[]>("admin/categories", { params: { flat: flat ? 1 : undefined } }),
+
+  createCategory: (payload: Record<string, unknown>) =>
+    apiRequest<Category>("admin/categories", { method: "POST", body: payload }),
+
+  updateCategory: (id: number, payload: Record<string, unknown>) =>
+    apiRequest<Category>(`admin/categories/${id}`, { method: "PUT", body: payload }),
+
+  deleteCategory: (id: number) =>
+    apiRequest<null>(`admin/categories/${id}`, { method: "DELETE" }),
+
+  // Orders
+  getOrders: (params?: Record<string, string | number | undefined>) =>
+    apiRequest<Order[]>("admin/orders", { params }),
+
+  getOrder: (id: number | string) => apiRequest<Order>(`admin/orders/${id}`),
+
+  updateOrderStatus: (id: number, status: OrderStatus, reason?: string) =>
+    apiRequest<Order>(`admin/orders/${id}/status`, {
+      method: "PATCH",
+      body: { status, reason },
+    }),
+
+  cancelOrder: (id: number, reason?: string) =>
+    apiRequest<Order>(`admin/orders/${id}/cancel`, {
+      method: "POST",
+      body: { reason },
+    }),
+
+  // Coupons
+  getCoupons: (params?: Record<string, string | number | undefined>) =>
+    apiRequest<Coupon[]>("admin/coupons", { params }),
+
+  createCoupon: (payload: Record<string, unknown>) =>
+    apiRequest<Coupon>("admin/coupons", { method: "POST", body: payload }),
+
+  updateCoupon: (id: number, payload: Record<string, unknown>) =>
+    apiRequest<Coupon>(`admin/coupons/${id}`, { method: "PUT", body: payload }),
+
+  deleteCoupon: (id: number) =>
+    apiRequest<null>(`admin/coupons/${id}`, { method: "DELETE" }),
+
+  // Customers
+  getCustomers: (params?: Record<string, string | number | undefined>) =>
+    apiRequest<Customer[]>("admin/customers", { params }),
+
+  getCustomer: (id: number | string) =>
+    apiRequest<{
+      customer: Customer;
+      total_orders: number;
+      total_spending: string;
+      orders: Order[];
+    }>(`admin/customers/${id}`),
+
+  // Staff
+  getStaff: (params?: Record<string, string | number | undefined>) =>
+    apiRequest<Staff[]>("admin/staff", { params }),
+
+  createStaff: (payload: Record<string, unknown>) =>
+    apiRequest<Staff>("admin/staff", { method: "POST", body: payload }),
+
+  updateStaff: (id: number, payload: Record<string, unknown>) =>
+    apiRequest<Staff>(`admin/staff/${id}`, { method: "PUT", body: payload }),
+
+  deleteStaff: (id: number) =>
+    apiRequest<null>(`admin/staff/${id}`, { method: "DELETE" }),
+
+  // Roles & Permissions
+  getRoles: () => apiRequest<Role[]>("admin/roles"),
+  getPermissions: () => apiRequest<Permission[]>("admin/permissions"),
+
+  createRole: (payload: { name: string; description?: string; permission_ids: number[] }) =>
+    apiRequest<Role>("admin/roles", { method: "POST", body: payload }),
+
+  updateRole: (id: number, payload: { name?: string; description?: string; permission_ids?: number[] }) =>
+    apiRequest<Role>(`admin/roles/${id}`, { method: "PUT", body: payload }),
+
+  syncRolePermissions: (id: number, permission_ids: number[]) =>
+    apiRequest<Role>(`admin/roles/${id}/permissions`, {
+      method: "PUT",
+      body: { permission_ids },
+    }),
+
+  deleteRole: (id: number) =>
+    apiRequest<null>(`admin/roles/${id}`, { method: "DELETE" }),
+};
