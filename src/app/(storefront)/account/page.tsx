@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { CheckCircle2, MailWarning } from "lucide-react";
 import { toast } from "sonner";
 import { profileSchema } from "@/schemas";
 import { customerAuthApi } from "@/services/api";
@@ -18,6 +19,8 @@ type ProfileValues = z.infer<typeof profileSchema>;
 
 export default function CustomerAccountPage() {
   const { customer, refreshCustomer } = useCustomerAuth();
+  const [resending, setResending] = useState(false);
+
   const {
     register,
     handleSubmit,
@@ -47,10 +50,56 @@ export default function CustomerAccountPage() {
     }
   };
 
+  const handleResendVerification = async () => {
+    setResending(true);
+    try {
+      const res = await customerAuthApi.resendVerificationEmail();
+      toast.success(res.message || "Verification email sent.");
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Could not resend verification email."));
+    } finally {
+      setResending(false);
+    }
+  };
+
+  const isVerified = Boolean(customer?.email_verified_at || customer?.is_email_verified);
+
   return (
     <div className="mx-auto max-w-[1240px] px-4 pb-8 xl:px-0">
       <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "My Profile" }]} />
-      <h1 className="font-display text-[32px] sm:text-[40px] text-black">MY ACCOUNT</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-display text-[32px] sm:text-[40px] text-black">MY ACCOUNT</h1>
+        {customer && isVerified && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3.5 py-1.5 text-xs font-semibold text-emerald-700">
+            <CheckCircle2 className="h-4 w-4" /> Email Verified
+          </span>
+        )}
+      </div>
+
+      {customer && !isVerified && (
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-[16px] border border-amber-300 bg-amber-50 px-5 py-4">
+          <div className="flex items-start gap-3">
+            <MailWarning className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div>
+              <p className="text-sm font-semibold text-amber-950">
+                Please verify your email address
+              </p>
+              <p className="text-xs text-amber-800">
+                We sent a verification link to <strong>{customer.email}</strong>. Check your inbox
+                (or Mailpit) to confirm your account.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            disabled={resending}
+            onClick={handleResendVerification}
+            className="h-9 rounded-full bg-amber-900 px-5 text-xs font-medium text-white hover:bg-amber-950 disabled:opacity-50 cursor-pointer"
+          >
+            {resending ? "Sending..." : "Resend Verification Email"}
+          </button>
+        </div>
+      )}
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
         <div className="rounded-[20px] border border-black/10 p-6 sm:p-8 lg:col-span-7">

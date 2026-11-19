@@ -7,9 +7,9 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
-import { Lock, ShieldCheck } from "lucide-react";
+import { Lock, ShieldCheck, Tag, X } from "lucide-react";
 import { toast } from "sonner";
-import { checkoutSchema } from "@/schemas";
+import { checkoutSchema, couponApplySchema } from "@/schemas";
 import { checkoutApi } from "@/services/api";
 import { useCart } from "@/providers/CartProvider";
 import { useCustomerAuth } from "@/providers/CustomerAuthProvider";
@@ -24,6 +24,7 @@ import type { CheckoutResponse } from "@/types/api";
 import type { z } from "zod";
 
 type CheckoutValues = z.infer<typeof checkoutSchema>;
+type CouponValues = z.infer<typeof couponApplySchema>;
 
 function StripePaymentForm({
   orderId,
@@ -107,10 +108,31 @@ function StripePaymentForm({
 export function CheckoutView() {
   const router = useRouter();
   const { customer, loading: authLoading } = useCustomerAuth();
-  const { cart, refreshCart, clearLocalAfterCheckout } = useCart();
+  const {
+    cart,
+    mutating: cartMutating,
+    applyCoupon,
+    removeCoupon,
+    refreshCart,
+    clearLocalAfterCheckout,
+  } = useCart();
 
   const [checkoutSession, setCheckoutSession] = useState<CheckoutResponse | null>(null);
   const [initializing, setInitializing] = useState(false);
+
+  const couponForm = useForm<CouponValues>({
+    resolver: zodResolver(couponApplySchema),
+    defaultValues: { code: "" },
+  });
+
+  const onApplyCheckoutCoupon = async (values: CouponValues) => {
+    const result = await applyCoupon(values.code);
+    if (result.ok) {
+      couponForm.reset({ code: "" });
+    } else if (result.error) {
+      couponForm.setError("code", { type: "server", message: result.error });
+    }
+  };
 
   const {
     register,
@@ -379,9 +401,20 @@ export function CheckoutView() {
               </span>
             </div>
             {Number(checkoutSession?.order.discount_amount ?? cart.discount_amount) > 0 && (
-              <div className="flex justify-between text-[#FF3333]">
-                <span>
+              <div className="flex items-center justify-between text-[#FF3333]">
+                <span className="inline-flex items-center gap-2">
                   Coupon Discount ({checkoutSession?.order.coupon_code ?? cart.coupon?.code})
+                  {!checkoutSession && cart.coupon && (
+                    <button
+                      type="button"
+                      disabled={cartMutating}
+                      onClick={removeCoupon}
+                      aria-label="Remove coupon"
+                      className="rounded-full p-0.5 hover:bg-[#FF3333]/10 cursor-pointer"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </span>
                 <span className="font-medium">
                   -{formatExactMoney(checkoutSession?.order.discount_amount ?? cart.discount_amount)}
@@ -403,6 +436,44 @@ export function CheckoutView() {
               </span>
             </div>
           </div>
+
+          {!checkoutSession && (
+            <div className="mt-5 border-t border-black/10 pt-4">
+              <form
+                noValidate
+                onSubmit={couponForm.handleSubmit(onApplyCheckoutCoupon)}
+                className="space-y-1.5"
+              >
+                <Label htmlFor="checkout-coupon-code" className="text-xs text-black/70">
+                  Have a promo code?
+                </Label>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Tag className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-black/40" />
+                    <Input
+                      id="checkout-coupon-code"
+                      aria-invalid={Boolean(couponForm.formState.errors.code)}
+                      placeholder="Enter promo code (e.g. WELCOME20)"
+                      className="pl-10 rounded-full bg-[#F0F0F0] border-transparent text-black"
+                      {...couponForm.register("code")}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={cartMutating}
+                    className="h-10 rounded-full bg-black px-5 text-xs font-medium text-white hover:bg-black/85 disabled:opacity-50 cursor-pointer"
+                  >
+                    Apply
+                  </button>
+                </div>
+                {couponForm.formState.errors.code && (
+                  <p role="alert" className="pl-2 text-xs font-medium text-[#FF3333]">
+                    {couponForm.formState.errors.code.message}
+                  </p>
+                )}
+              </form>
+            </div>
+          )}
 
           <p className="mt-4 text-xs text-black/50">
             All prices, coupon discounts, and totals are independently computed and verified by the

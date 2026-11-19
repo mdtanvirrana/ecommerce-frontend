@@ -152,7 +152,24 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
 
 ---
 
-## Running Both Applications
+### One-Command Docker Setup (Bonus)
+
+You can run the entire stack (MySQL 8, Mailpit, Laravel API, Queue Worker, and Next.js Frontend) with one command from the repository root:
+
+```bash
+docker compose up --build
+```
+
+- **Storefront**: `http://localhost:3000`
+- **Admin Panel**: `http://localhost:3000/admin`
+- **Laravel API**: `http://localhost:8000/api/v1`
+- **Mailpit Web UI**: `http://localhost:8025` (inspect registration verification links, password resets, and order/refund emails)
+
+*(Optional: pass `STRIPE_KEY`, `STRIPE_SECRET`, and `STRIPE_WEBHOOK_SECRET` in your shell or root `.env` to enable live Stripe Test Mode card entry inside Docker.)*
+
+---
+
+## Running Both Applications (Manual Local Setup)
 
 1. **Start Laravel API (port 8000)**:
    ```bash
@@ -247,6 +264,8 @@ npx tsc --noEmit && npm run build
 
 ## Known Limitations, Skipped Optional Features & Future Improvements
 
-- **Skipped optional bonus features** (prioritized payment integrity, RBAC, and stock concurrency per Section 22): TOTP-based Admin 2FA, Docker Compose file, CSV report export endpoint.
-- **Live Stripe Elements UI** requires valid `pk_test_...` / `sk_test_...` / `whsec_...` Test Mode keys configured in `.env` and `.env.local` (all server-side payment, webhook, refund, and oversell paths are fully tested via mocked `StripeGatewayInterface` in Pest).
-- **Future Improvements**: Customer product review submission backed by a `reviews` table (verified buyers only), Redis-backed caching & Horizon queues, CSV/PDF report exports for `reports.export`, multi-currency support, and TOTP 2FA for staff accounts.
+- **Implemented Optional Bonus Features**: Customer email verification (signed Mailpit links + `/verify-email` + resend banner), Admin 2FA (RFC 6238 TOTP with local QR code, 8 single-use recovery codes, and login challenge), guest cart persistence & login merge, product reviews & ratings (storefront + admin moderation), Admin Dark Mode, Pest feature tests (**26 tests, 235 assertions**), and one-command Docker Compose setup (`docker-compose.yml`).
+- **Remaining Unconfigured / External Items**:
+  - **Live Stripe Elements card entry** requires configuring your real Stripe Test Mode keys (`pk_test_...`, `sk_test_...`, `whsec_...`) in `.env` and `.env.local` (PaymentIntents are strictly card-only via `payment_method_types: ['card']`, and all server-side payment/webhook/refund/oversell paths are verified via Pest tests).
+  - **Live cloud deployment URL** and **5-minute walkthrough video** depend on external hosting accounts / recording.
+- **Future Improvements**: Redis-backed caching & Horizon queues, CSV/PDF report exports for `reports.export`, multi-currency support, and Playwright E2E CI pipeline.

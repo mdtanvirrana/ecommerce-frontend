@@ -226,3 +226,22 @@ export const newsletterSchema = z.object({
 export const couponApplySchema = z.object({
   code: z.string().trim().min(2, "Please enter a promo code."),
 });
+
+export const twoFactorCodeSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .min(6, "Enter the 6-digit authenticator code or recovery code.")
+    .max(20, "Code is too long."),
+});
+
+export const twoFactorConfirmSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, "Enter a valid 6-digit code from your authenticator app."),
+});
+
+export const twoFactorPasswordSchema = z.object({
+  password: z.string().min(1, "Current password is required to continue."),
+});

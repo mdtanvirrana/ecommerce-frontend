@@ -4,11 +4,19 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { adminAuthApi } from "@/services/api";
 import type { Staff } from "@/types/api";
 
+export type AdminLoginResult =
+  | { requiresTwoFactor: true; twoFactorToken: string }
+  | { requiresTwoFactor: false; staff: Staff };
+
 interface AdminAuthContextValue {
   staff: Staff | null;
   loading: boolean;
   refreshStaff: () => Promise<Staff | null>;
-  login: (email: string, password: string) => Promise<Staff>;
+  login: (email: string, password: string) => Promise<AdminLoginResult>;
+  completeTwoFactor: (
+    twoFactorToken: string,
+    code: string,
+  ) => Promise<{ staff: Staff; usedRecoveryCode: boolean }>;
   logout: () => Promise<void>;
   hasPermission: (permission: string) => boolean;
   hasAnyPermission: (permissions: string[]) => boolean;
@@ -51,11 +59,41 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const login = useCallback(async (email: string, password: string): Promise<Staff> => {
-    const res = await adminAuthApi.login({ email, password });
-    setStaff(res.data.staff);
-    return res.data.staff;
-  }, []);
+  const login = useCallback(
+    async (email: string, password: string): Promise<AdminLoginResult> => {
+      const res = await adminAuthApi.login({ email, password });
+      if (res.data.requires_two_factor && res.data.two_factor_token) {
+        return {
+          requiresTwoFactor: true,
+          twoFactorToken: res.data.two_factor_token,
+        };
+      }
+      if (!res.data.staff) {
+        throw new Error("Invalid staff authentication response.");
+      }
+      setStaff(res.data.staff);
+      return { requiresTwoFactor: false, staff: res.data.staff };
+    },
+    [],
+  );
+
+  const completeTwoFactor = useCallback(
+    async (
+      twoFactorToken: string,
+      code: string,
+    ): Promise<{ staff: Staff; usedRecoveryCode: boolean }> => {
+      const res = await adminAuthApi.verifyTwoFactorChallenge({
+        two_factor_token: twoFactorToken,
+        code,
+      });
+      setStaff(res.data.staff);
+      return {
+        staff: res.data.staff,
+        usedRecoveryCode: Boolean(res.data.used_recovery_code),
+      };
+    },
+    [],
+  );
 
   const logout = useCallback(async () => {
     await adminAuthApi.logout();
@@ -82,7 +120,16 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AdminAuthContext.Provider
-      value={{ staff, loading, refreshStaff, login, logout, hasPermission, hasAnyPermission }}
+      value={{
+        staff,
+        loading,
+        refreshStaff,
+        login,
+        completeTwoFactor,
+        logout,
+        hasPermission,
+        hasAnyPermission,
+      }}
     >
       {children}
     </AdminAuthContext.Provider>

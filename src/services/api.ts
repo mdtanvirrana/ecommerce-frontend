@@ -102,6 +102,14 @@ export const customerAuthApi = {
     password: string;
     password_confirmation: string;
   }) => apiRequest<null>("password/reset", { method: "POST", body: payload }),
+
+  verifyEmail: (params: { id: string; hash: string; expires: string; signature: string }) =>
+    apiRequest<Customer>(`email/verify/${encodeURIComponent(params.id)}/${encodeURIComponent(params.hash)}`, {
+      params: { expires: params.expires, signature: params.signature },
+    }),
+
+  resendVerificationEmail: () =>
+    apiRequest<Customer | null>("email/verification-notification", { method: "POST" }),
 };
 
 // ============ Customer Cart & Checkout & Orders ============
@@ -171,9 +179,20 @@ export const checkoutApi = {
 // ============ Admin Auth ============
 export const adminAuthApi = {
   login: (payload: { email: string; password: string }) =>
-    apiRequest<{ staff: Staff }>("", {
+    apiRequest<{
+      requires_two_factor?: boolean;
+      two_factor_token?: string;
+      staff?: Staff;
+    }>("", {
       method: "POST",
       directUrl: "/api/admin-auth/login",
+      body: payload,
+    }),
+
+  verifyTwoFactorChallenge: (payload: { two_factor_token: string; code: string }) =>
+    apiRequest<{ staff: Staff; used_recovery_code?: boolean }>("", {
+      method: "POST",
+      directUrl: "/api/admin-auth/two-factor",
       body: payload,
     }),
 
@@ -193,6 +212,29 @@ export const adminAuthApi = {
     password: string;
     password_confirmation: string;
   }) => apiRequest<null>("admin/profile/password", { method: "PUT", body: payload }),
+
+  setupTwoFactor: () =>
+    apiRequest<{ secret: string; issuer: string; otpauth_url: string }>("admin/two-factor/setup", {
+      method: "POST",
+    }),
+
+  confirmTwoFactor: (code: string) =>
+    apiRequest<{ two_factor_enabled: boolean; recovery_codes: string[]; staff: Staff }>(
+      "admin/two-factor/confirm",
+      { method: "POST", body: { code } },
+    ),
+
+  disableTwoFactor: (password: string) =>
+    apiRequest<{ two_factor_enabled: boolean; staff: Staff }>("admin/two-factor/disable", {
+      method: "POST",
+      body: { password },
+    }),
+
+  regenerateRecoveryCodes: (password: string) =>
+    apiRequest<{ recovery_codes: string[] }>("admin/two-factor/recovery-codes", {
+      method: "POST",
+      body: { password },
+    }),
 
   forgotPassword: (email: string) =>
     apiRequest<null>("admin/password/forgot", { method: "POST", body: { email } }),

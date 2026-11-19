@@ -77,6 +77,7 @@ export interface Customer {
   phone: string | null;
   is_active: boolean;
   email_verified_at: string | null;
+  is_email_verified?: boolean;
   orders_count?: number;
   total_spent?: string;
   created_at?: string;
@@ -108,6 +109,8 @@ export interface Staff {
   phone: string | null;
   is_active: boolean;
   is_super_admin: boolean;
+  two_factor_enabled?: boolean;
+  two_factor_confirmed_at?: string | null;
   roles?: Role[];
   permissions: string[];
   created_at?: string;

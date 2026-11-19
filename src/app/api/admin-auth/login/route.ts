@@ -20,7 +20,25 @@ export async function POST(request: NextRequest) {
     errors: {},
   }));
 
-  if (!upstream.ok || !payload?.data?.token) {
+  if (!upstream.ok) {
+    return NextResponse.json(payload, { status: upstream.status });
+  }
+
+  // Two-Factor Challenge step: pass challenge token without issuing auth cookie yet
+  if (payload?.data?.requires_two_factor && payload?.data?.two_factor_token) {
+    return NextResponse.json(
+      {
+        ...payload,
+        data: {
+          requires_two_factor: true,
+          two_factor_token: String(payload.data.two_factor_token),
+        },
+      },
+      { status: upstream.status },
+    );
+  }
+
+  if (!payload?.data?.token) {
     return NextResponse.json(payload, { status: upstream.status });
   }
 
@@ -28,6 +46,7 @@ export async function POST(request: NextRequest) {
   const sanitized = {
     ...payload,
     data: {
+      requires_two_factor: false,
       staff: payload.data.staff,
     },
   };
