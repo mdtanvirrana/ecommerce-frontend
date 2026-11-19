@@ -68,8 +68,8 @@ export default function AdminOrdersPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[220px] max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="relative flex-1 min-w-[240px] max-w-sm">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => {
@@ -77,7 +77,7 @@ export default function AdminOrdersPage() {
               setPage(1);
             }}
             placeholder="Search order #, customer, email..."
-            className="pl-9 h-9"
+            className="pl-10"
           />
         </div>
         <Select
@@ -88,7 +88,7 @@ export default function AdminOrdersPage() {
             setPage(1);
           }}
         >
-          <SelectTrigger aria-label="Filter orders by status" className="h-9 min-w-[168px]">
+          <SelectTrigger aria-label="Filter orders by status" className="min-w-[175px]">
             <SelectValue>{ORDER_STATUS_OPTIONS[status] ?? "All Statuses"}</SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -101,7 +101,7 @@ export default function AdminOrdersPage() {
         </Select>
       </div>
 
-      <Card>
+      <Card className="py-0">
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-6 space-y-3">

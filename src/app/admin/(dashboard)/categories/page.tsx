@@ -395,7 +395,7 @@ export default function AdminCategoriesPage() {
                       items={parentOptions}
                       onValueChange={(val) => field.onChange(val ?? "none")}
                     >
-                      <SelectTrigger className="w-full h-9">
+                      <SelectTrigger className="w-full">
                         <SelectValue>
                           {parentOptions[currentVal] ?? "None (Top-Level Category)"}
                         </SelectValue>

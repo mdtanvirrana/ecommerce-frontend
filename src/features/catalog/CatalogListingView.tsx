@@ -506,7 +506,7 @@ export function CatalogListingView({
                 >
                   <SelectTrigger
                     aria-label="Sort products"
-                    className="h-9 min-w-[168px] rounded-full border-black/15 bg-white font-medium text-black"
+                    className="min-w-[178px] rounded-full border-black/15 bg-white font-medium text-black"
                   >
                     <SelectValue>{SORT_OPTIONS[initialSort] ?? "Most Popular"}</SelectValue>
                   </SelectTrigger>
@@ -544,7 +544,7 @@ export function CatalogListingView({
               <SelectTrigger
                 size="sm"
                 aria-label="Sort products mobile"
-                className="min-w-[160px] rounded-full border-transparent bg-[#F0F0F0] px-3 text-xs font-medium text-black"
+                className="min-w-[165px] rounded-full border-transparent bg-[#F0F0F0] px-3.5 text-xs font-medium text-black shadow-none"
               >
                 <SelectValue>{SORT_OPTIONS[initialSort] ?? "Most Popular"}</SelectValue>
               </SelectTrigger>

@@ -260,8 +260,8 @@ export default function AdminReviewsPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[220px] max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="relative flex-1 min-w-[240px] max-w-sm">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => {
@@ -269,7 +269,7 @@ export default function AdminReviewsPage() {
               setPage(1);
             }}
             placeholder="Search reviewer, product, comment..."
-            className="pl-9 h-9"
+            className="pl-10"
           />
         </div>
 
@@ -281,7 +281,7 @@ export default function AdminReviewsPage() {
             setPage(1);
           }}
         >
-          <SelectTrigger aria-label="Filter by rating" className="h-9 min-w-[140px]">
+          <SelectTrigger aria-label="Filter by rating" className="min-w-[155px]">
             <SelectValue>{RATING_FILTER_OPTIONS[ratingFilter] ?? "All Ratings"}</SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -301,7 +301,7 @@ export default function AdminReviewsPage() {
             setPage(1);
           }}
         >
-          <SelectTrigger aria-label="Filter by moderation status" className="h-9 min-w-[180px]">
+          <SelectTrigger aria-label="Filter by moderation status" className="min-w-[195px]">
             <SelectValue>{STATUS_FILTER_OPTIONS[statusFilter] ?? "All Statuses"}</SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -315,7 +315,7 @@ export default function AdminReviewsPage() {
       </div>
 
       {/* Reviews Table */}
-      <Card>
+      <Card className="py-0">
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-6 space-y-3">

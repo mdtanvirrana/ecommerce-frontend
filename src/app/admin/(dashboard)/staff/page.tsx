@@ -202,7 +202,7 @@ export default function AdminStaffPage() {
         )}
       </div>
 
-      <Card>
+      <Card className="py-0">
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-6 space-y-3">

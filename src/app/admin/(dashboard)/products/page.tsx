@@ -336,8 +336,8 @@ export default function AdminProductsPage() {
 
       {/* Filters Bar */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[220px] max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="relative flex-1 min-w-[240px] max-w-sm">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => {
@@ -345,7 +345,7 @@ export default function AdminProductsPage() {
               setPage(1);
             }}
             placeholder="Search by name, SKU, slug..."
-            className="pl-9 h-9"
+            className="pl-10"
           />
         </div>
         <Select
@@ -356,7 +356,7 @@ export default function AdminProductsPage() {
             setPage(1);
           }}
         >
-          <SelectTrigger aria-label="Filter by category" className="h-9 min-w-[210px]">
+          <SelectTrigger aria-label="Filter by category" className="min-w-[220px]">
             <SelectValue>{categoryFilterOptions[categoryFilter] ?? "All Categories"}</SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -370,7 +370,7 @@ export default function AdminProductsPage() {
       </div>
 
       {/* Products Table */}
-      <Card>
+      <Card className="py-0">
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-6 space-y-3">
@@ -580,7 +580,7 @@ export default function AdminProductsPage() {
                       >
                         <SelectTrigger
                           aria-invalid={Boolean(errors.category_id)}
-                          className="w-full h-9"
+                          className="w-full"
                         >
                           <SelectValue placeholder="Select category">
                             {currentVal

@@ -90,7 +90,7 @@ export default function AdminCustomerDetailPage() {
         </Card>
       </div>
 
-      <Card>
+      <Card className="pb-0">
         <CardHeader>
           <CardTitle>Order History</CardTitle>
         </CardHeader>

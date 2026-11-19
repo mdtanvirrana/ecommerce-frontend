@@ -43,7 +43,7 @@ export default function AdminCustomersPage() {
       </div>
 
       <div className="relative max-w-sm">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           value={search}
           onChange={(e) => {
@@ -51,11 +51,11 @@ export default function AdminCustomersPage() {
             setPage(1);
           }}
           placeholder="Search customer name, email, phone..."
-          className="pl-9 h-9"
+          className="pl-10"
         />
       </div>
 
-      <Card>
+      <Card className="py-0">
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-6 space-y-3">

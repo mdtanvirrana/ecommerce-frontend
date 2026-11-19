@@ -218,7 +218,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* Recent Orders Table */}
-      <Card>
+      <Card className="pb-0">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Recent Orders</CardTitle>
