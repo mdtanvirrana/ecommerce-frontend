@@ -1,27 +1,43 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowRight, Minus, Plus, ShoppingBag, Tag, Trash2, X } from "lucide-react";
 import { useCart } from "@/providers/CartProvider";
 import { useCustomerAuth } from "@/providers/CustomerAuthProvider";
 import { Breadcrumb } from "@/components/storefront/Breadcrumb";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatMoney } from "@/lib/utils";
+import { couponApplySchema } from "@/schemas";
+import type { z } from "zod";
+
+type CouponFormValues = z.infer<typeof couponApplySchema>;
 
 export function CartView() {
   const router = useRouter();
   const { customer } = useCustomerAuth();
   const { cart, loading, mutating, updateQuantity, removeItem, applyCoupon, removeCoupon } = useCart();
-  const [promoCode, setPromoCode] = useState("");
 
-  const handleApplyCoupon = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!promoCode.trim()) return;
-    const ok = await applyCoupon(promoCode);
-    if (ok) {
-      setPromoCode("");
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setError,
+    formState: { errors },
+  } = useForm<CouponFormValues>({
+    resolver: zodResolver(couponApplySchema),
+    defaultValues: { code: "" },
+  });
+
+  const handleApplyCoupon = async (values: CouponFormValues) => {
+    const result = await applyCoupon(values.code);
+    if (result.ok) {
+      reset({ code: "" });
+    } else if (result.error) {
+      setError("code", { type: "server", message: result.error });
     }
   };
 
@@ -204,24 +220,31 @@ export function CartView() {
             )}
 
             {/* Promo Code Input */}
-            <form onSubmit={handleApplyCoupon} className="mt-6 flex items-center gap-3">
-              <div className="relative flex-1">
-                <Tag className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-black/40" />
-                <input
-                  type="text"
-                  value={promoCode}
-                  onChange={(e) => setPromoCode(e.target.value)}
-                  placeholder="Add promo code"
-                  className="h-12 w-full rounded-full bg-[#F0F0F0] pl-11 pr-4 text-sm sm:text-base text-black placeholder:text-black/40 focus:outline-none"
-                />
+            <form noValidate onSubmit={handleSubmit(handleApplyCoupon)} className="mt-6">
+              <div className="flex items-center gap-3">
+                <div className="relative flex-1">
+                  <Tag className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-black/40" />
+                  <input
+                    type="text"
+                    aria-invalid={Boolean(errors.code)}
+                    placeholder="Add promo code"
+                    className="h-12 w-full rounded-full bg-[#F0F0F0] pl-11 pr-4 text-sm sm:text-base text-black placeholder:text-black/40 focus:outline-none focus:ring-2 focus:ring-black/20"
+                    {...register("code")}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={mutating}
+                  className="h-12 rounded-full bg-black px-6 sm:px-8 text-sm sm:text-base font-medium text-white hover:bg-black/85 disabled:opacity-50 cursor-pointer"
+                >
+                  Apply
+                </button>
               </div>
-              <button
-                type="submit"
-                disabled={mutating || !promoCode.trim()}
-                className="h-12 rounded-full bg-black px-6 sm:px-8 text-sm sm:text-base font-medium text-white hover:bg-black/85 disabled:opacity-50 cursor-pointer"
-              >
-                Apply
-              </button>
+              {errors.code && (
+                <p role="alert" className="mt-1.5 pl-4 text-xs font-medium text-[#FF3333]">
+                  {errors.code.message}
+                </p>
+              )}
             </form>
 
             <p className="mt-2.5 text-xs text-black/50">

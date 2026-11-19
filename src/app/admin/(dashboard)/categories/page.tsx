@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Edit, FolderTree, Plus, Trash2 } from "lucide-react";
+import { Controller, useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Edit, FolderTree, ImageIcon, Plus, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/services/api";
 import { useAdminAuth } from "@/providers/AdminAuthProvider";
@@ -16,8 +18,20 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { ApiError } from "@/lib/apiClient";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { applyApiErrorsToForm, getApiErrorMessage } from "@/lib/formErrors";
+import { categoryFormSchema } from "@/schemas";
 import type { Category } from "@/types/api";
+import type { z } from "zod";
+
+type CategoryFormInput = z.input<typeof categoryFormSchema>;
+type CategoryFormValues = z.output<typeof categoryFormSchema>;
 
 export default function AdminCategoriesPage() {
   const queryClient = useQueryClient();
@@ -25,13 +39,10 @@ export default function AdminCategoriesPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Category | null>(null);
-  const [name, setName] = useState("");
-  const [slug, setSlug] = useState("");
-  const [parentId, setParentId] = useState("");
-  const [description, setDescription] = useState("");
-  const [sortOrder, setSortOrder] = useState("0");
-  const [isActive, setIsActive] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [removeExistingImage, setRemoveExistingImage] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -42,54 +53,143 @@ export default function AdminCategoriesPage() {
   });
   const tree = treeRes?.data ?? [];
 
+  const {
+    register,
+    handleSubmit,
+    control,
+    reset,
+    setError,
+    formState: { errors, isSubmitting },
+  } = useForm<CategoryFormInput, unknown, CategoryFormValues>({
+    resolver: zodResolver(categoryFormSchema),
+    defaultValues: {
+      name: "",
+      slug: "",
+      parent_id: "none",
+      description: "",
+      sort_order: 0,
+      is_active: true,
+    },
+  });
+
+  const parentOptions = useMemo(() => {
+    const map: Record<string, string> = { none: "None (Top-Level Category)" };
+    for (const p of tree) {
+      if (!editing || p.id !== editing.id) {
+        map[String(p.id)] = p.name;
+      }
+    }
+    return map;
+  }, [tree, editing]);
+
+  const clearImageSelection = () => {
+    if (imagePreview && imagePreview.startsWith("blob:")) {
+      URL.revokeObjectURL(imagePreview);
+    }
+    setImageFile(null);
+    setImagePreview(null);
+    setImageError(null);
+  };
+
   const openCreate = (defaultParentId?: number) => {
     setEditing(null);
-    setName("");
-    setSlug("");
-    setParentId(defaultParentId ? String(defaultParentId) : "");
-    setDescription("");
-    setSortOrder("0");
-    setIsActive(true);
+    clearImageSelection();
+    setRemoveExistingImage(false);
+    reset({
+      name: "",
+      slug: "",
+      parent_id: defaultParentId ? String(defaultParentId) : "none",
+      description: "",
+      sort_order: 0,
+      is_active: true,
+    });
     setDialogOpen(true);
   };
 
   const openEdit = (cat: Category) => {
     setEditing(cat);
-    setName(cat.name);
-    setSlug(cat.slug);
-    setParentId(cat.parent_id ? String(cat.parent_id) : "");
-    setDescription(cat.description ?? "");
-    setSortOrder(String(cat.sort_order));
-    setIsActive(cat.is_active);
+    clearImageSelection();
+    setRemoveExistingImage(false);
+    reset({
+      name: cat.name,
+      slug: cat.slug,
+      parent_id: cat.parent_id ? String(cat.parent_id) : "none",
+      description: cat.description ?? "",
+      sort_order: cat.sort_order,
+      is_active: cat.is_active,
+    });
     setDialogOpen(true);
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    setImageError(null);
+    if (!file) {
+      clearImageSelection();
+      return;
+    }
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setImageError("Please upload a JPG, PNG, or WebP image.");
+      return;
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      setImageError("Image size must be 4MB or less.");
+      return;
+    }
+    if (imagePreview && imagePreview.startsWith("blob:")) {
+      URL.revokeObjectURL(imagePreview);
+    }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+    setRemoveExistingImage(false);
+  };
+
+  const onSubmit = async (values: CategoryFormValues) => {
+    setImageError(null);
     try {
-      const payload = {
-        name: name.trim(),
-        slug: slug.trim() || undefined,
-        parent_id: parentId ? Number(parentId) : null,
-        description: description || null,
-        sort_order: Number(sortOrder) || 0,
-        is_active: isActive,
-      };
+      const fd = new FormData();
+      fd.append("name", values.name.trim());
+      if (values.slug?.trim()) fd.append("slug", values.slug.trim());
+      if (values.parent_id !== null && values.parent_id !== undefined) {
+        fd.append("parent_id", String(values.parent_id));
+      } else {
+        fd.append("parent_id", "");
+      }
+      fd.append("description", values.description?.trim() ?? "");
+      fd.append("sort_order", String(values.sort_order ?? 0));
+      fd.append("is_active", values.is_active ? "1" : "0");
+
+      if (imageFile) {
+        fd.append("image", imageFile);
+      } else if (editing && removeExistingImage) {
+        fd.append("remove_image", "1");
+      }
+
       if (editing) {
-        await adminApi.updateCategory(editing.id, payload);
+        await adminApi.updateCategory(editing.id, fd);
         toast.success("Category updated.");
       } else {
-        await adminApi.createCategory(payload);
+        await adminApi.createCategory(fd);
         toast.success("Category created.");
       }
       setDialogOpen(false);
+      clearImageSelection();
       await queryClient.invalidateQueries({ queryKey: ["admin-categories-tree"] });
       await queryClient.invalidateQueries({ queryKey: ["admin-categories-flat"] });
+      await queryClient.invalidateQueries({ queryKey: ["storefront-categories"] });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to save category.");
-    } finally {
-      setSaving(false);
+      applyApiErrorsToForm(err, setError, [
+        "name",
+        "slug",
+        "parent_id",
+        "description",
+        "sort_order",
+      ]);
+      const errObj = err as { errors?: Record<string, string[]> };
+      if (errObj?.errors?.image?.[0]) {
+        setImageError(errObj.errors.image[0]);
+      }
+      toast.error(getApiErrorMessage(err, "Failed to save category."));
     }
   };
 
@@ -101,20 +201,25 @@ export default function AdminCategoriesPage() {
       toast.success("Category deleted.");
       setDeleteTarget(null);
       await queryClient.invalidateQueries({ queryKey: ["admin-categories-tree"] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-categories-flat"] });
+      await queryClient.invalidateQueries({ queryKey: ["storefront-categories"] });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Cannot delete category.");
+      toast.error(getApiErrorMessage(err, "Cannot delete category."));
     } finally {
       setDeleting(false);
     }
   };
+
+  const displayedPreview = imagePreview || (!removeExistingImage ? editing?.image_url : null);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Categories</h1>
-          <p className="text-sm text-black/60 dark:text-zinc-400">
-            Two-level parent/child category hierarchy with circular relationship protection.
+          <p className="text-sm text-muted-foreground">
+            Two-level parent/child category hierarchy with homepage dress-style images and circular
+            relationship protection.
           </p>
         </div>
         {hasPermission("categories.create") && (
@@ -136,22 +241,28 @@ export default function AdminCategoriesPage() {
             <Card key={parent.id}>
               <CardContent className="p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <FolderTree className="h-5 w-5 text-black/60 dark:text-zinc-400" />
+                  <div className="flex items-center gap-3.5">
+                    {parent.image_url ? (
+                      <img
+                        src={parent.image_url}
+                        alt={parent.name}
+                        className="h-14 w-14 shrink-0 rounded-xl border border-border object-cover bg-muted"
+                      />
+                    ) : (
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-border bg-muted text-muted-foreground">
+                        <FolderTree className="h-5 w-5" />
+                      </div>
+                    )}
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <h2 className="text-base font-bold">{parent.name}</h2>
                         <Badge variant={parent.is_active ? "default" : "secondary"}>
                           {parent.is_active ? "Active" : "Inactive"}
                         </Badge>
-                        <span className="text-xs text-black/50 dark:text-zinc-400">
-                          /{parent.slug}
-                        </span>
+                        <span className="text-xs text-muted-foreground">/{parent.slug}</span>
                       </div>
                       {parent.description && (
-                        <p className="mt-0.5 text-xs text-black/60 dark:text-zinc-400">
-                          {parent.description}
-                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{parent.description}</p>
                       )}
                     </div>
                   </div>
@@ -162,37 +273,57 @@ export default function AdminCategoriesPage() {
                       </Button>
                     )}
                     {hasPermission("categories.edit") && (
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(parent)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Edit ${parent.name}`}
+                        onClick={() => openEdit(parent)}
+                      >
                         <Edit className="h-4 w-4" />
                       </Button>
                     )}
                     {hasPermission("categories.delete") && (
-                      <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(parent)}>
-                        <Trash2 className="h-4 w-4 text-[#FF3333]" />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Delete ${parent.name}`}
+                        onClick={() => setDeleteTarget(parent)}
+                      >
+                        <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
                       </Button>
                     )}
                   </div>
                 </div>
 
                 {parent.children && parent.children.length > 0 && (
-                  <div className="mt-4 ml-4 border-l-2 border-black/10 dark:border-zinc-800 pl-4 space-y-2">
+                  <div className="mt-4 ml-4 border-l-2 border-border pl-4 space-y-2">
                     {parent.children.map((child) => (
                       <div
                         key={child.id}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-zinc-50 dark:bg-zinc-800/50 px-3.5 py-2.5"
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/60 px-3.5 py-2.5"
                       >
                         <div className="flex items-center gap-2.5 text-sm">
+                          {child.image_url && (
+                            <img
+                              src={child.image_url}
+                              alt={child.name}
+                              className="h-8 w-8 rounded-md border border-border object-cover"
+                            />
+                          )}
                           <span className="font-medium">{child.name}</span>
-                          <span className="text-xs text-black/50 dark:text-zinc-400">
-                            /{child.slug}
-                          </span>
+                          <span className="text-xs text-muted-foreground">/{child.slug}</span>
                           <Badge variant="outline" className="text-[11px]">
                             {child.products_count ?? 0} products
                           </Badge>
                         </div>
                         <div className="flex items-center gap-1">
                           {hasPermission("categories.edit") && (
-                            <Button variant="ghost" size="icon" onClick={() => openEdit(child)}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Edit ${child.name}`}
+                              onClick={() => openEdit(child)}
+                            >
                               <Edit className="h-3.5 w-3.5" />
                             </Button>
                           )}
@@ -200,9 +331,10 @@ export default function AdminCategoriesPage() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              aria-label={`Delete ${child.name}`}
                               onClick={() => setDeleteTarget(child)}
                             >
-                              <Trash2 className="h-3.5 w-3.5 text-[#FF3333]" />
+                              <Trash2 className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
                             </Button>
                           )}
                         </div>
@@ -217,60 +349,180 @@ export default function AdminCategoriesPage() {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? `Edit ${editing.name}` : "Create Category"}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSave} className="space-y-4">
+          <form noValidate onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-1.5">
-              <Label>Name *</Label>
-              <Input required value={name} onChange={(e) => setName(e.target.value)} />
+              <Label htmlFor="cat-name">Name *</Label>
+              <Input
+                id="cat-name"
+                aria-invalid={Boolean(errors.name)}
+                {...register("name")}
+              />
+              {errors.name && (
+                <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                  {errors.name.message}
+                </p>
+              )}
             </div>
+
             <div className="space-y-1.5">
-              <Label>Slug (auto if blank)</Label>
-              <Input value={slug} onChange={(e) => setSlug(e.target.value)} />
+              <Label htmlFor="cat-slug">Slug (auto if blank)</Label>
+              <Input
+                id="cat-slug"
+                aria-invalid={Boolean(errors.slug)}
+                {...register("slug")}
+              />
+              {errors.slug && (
+                <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                  {errors.slug.message}
+                </p>
+              )}
             </div>
+
             <div className="space-y-1.5">
               <Label>Parent Category</Label>
-              <select
-                value={parentId}
-                onChange={(e) => setParentId(e.target.value)}
-                className="h-10 w-full rounded-lg border border-black/15 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              >
-                <option value="">None (Top-Level Category)</option>
-                {tree
-                  .filter((p) => !editing || p.id !== editing.id)
-                  .map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-              </select>
+              <Controller
+                name="parent_id"
+                control={control}
+                render={({ field }) => {
+                  const currentVal = field.value ? String(field.value) : "none";
+                  return (
+                    <Select
+                      value={currentVal}
+                      items={parentOptions}
+                      onValueChange={(val) => field.onChange(val ?? "none")}
+                    >
+                      <SelectTrigger className="w-full h-9">
+                        <SelectValue>
+                          {parentOptions[currentVal] ?? "None (Top-Level Category)"}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(parentOptions).map(([val, label]) => (
+                          <SelectItem key={val} value={val}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  );
+                }}
+              />
+              {errors.parent_id && (
+                <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                  {errors.parent_id.message}
+                </p>
+              )}
             </div>
+
+            {/* Category Image Upload */}
+            <div className="space-y-2">
+              <Label htmlFor="cat-image" className="inline-flex items-center gap-1.5">
+                <Upload className="h-4 w-4" /> Category Image (Homepage &amp; Banner)
+              </Label>
+
+              {displayedPreview ? (
+                <div className="relative flex items-center gap-4 rounded-xl border border-border bg-muted/40 p-3">
+                  <img
+                    src={displayedPreview}
+                    alt="Category preview"
+                    className="h-20 w-28 rounded-lg object-cover border border-border"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate text-xs font-medium">
+                      {imageFile ? imageFile.name : "Current category image"}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Displayed in Homepage Browse by Dress Style cards.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Remove category image"
+                    onClick={() => {
+                      clearImageSelection();
+                      setRemoveExistingImage(true);
+                    }}
+                  >
+                    <X className="h-4 w-4 text-red-600 dark:text-red-400" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 rounded-xl border border-dashed border-border p-3 text-xs text-muted-foreground">
+                  <ImageIcon className="h-4 w-4 shrink-0" />
+                  <span>No category image selected (JPG, PNG, or WebP up to 4MB).</span>
+                </div>
+              )}
+
+              <Input
+                id="cat-image"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleImageChange}
+              />
+              {imageError && (
+                <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                  {imageError}
+                </p>
+              )}
+            </div>
+
             <div className="space-y-1.5">
-              <Label>Description</Label>
-              <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
+              <Label htmlFor="cat-desc">Description</Label>
+              <Textarea
+                id="cat-desc"
+                aria-invalid={Boolean(errors.description)}
+                {...register("description")}
+              />
+              {errors.description && (
+                <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                  {errors.description.message}
+                </p>
+              )}
             </div>
-            <div className="grid grid-cols-2 gap-4 items-center">
+
+            <div className="grid grid-cols-2 gap-4 items-start">
               <div className="space-y-1.5">
-                <Label>Sort Order</Label>
+                <Label htmlFor="cat-sort">Sort Order</Label>
                 <Input
+                  id="cat-sort"
                   type="number"
                   min="0"
-                  value={sortOrder}
-                  onChange={(e) => setSortOrder(e.target.value)}
+                  aria-invalid={Boolean(errors.sort_order)}
+                  {...register("sort_order")}
                 />
+                {errors.sort_order && (
+                  <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                    {errors.sort_order.message}
+                  </p>
+                )}
               </div>
-              <label className="flex items-center gap-2 text-sm pt-5 cursor-pointer">
-                <Switch checked={isActive} onCheckedChange={setIsActive} /> Active
-              </label>
+              <Controller
+                name="is_active"
+                control={control}
+                render={({ field }) => (
+                  <label className="flex items-center gap-2 text-sm pt-7 cursor-pointer">
+                    <Switch
+                      checked={Boolean(field.value)}
+                      onCheckedChange={(checked) => field.onChange(checked)}
+                    />
+                    Active
+                  </label>
+                )}
+              />
             </div>
+
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={saving}>
-                {saving ? "Saving..." : "Save Category"}
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Saving..." : "Save Category"}
               </Button>
             </div>
           </form>

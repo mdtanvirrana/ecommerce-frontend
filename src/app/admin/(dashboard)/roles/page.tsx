@@ -2,6 +2,8 @@
 
 import React, { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Lock, Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/services/api";
@@ -15,8 +17,13 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { ApiError } from "@/lib/apiClient";
+import { applyApiErrorsToForm, getApiErrorMessage } from "@/lib/formErrors";
+import { roleFormSchema } from "@/schemas";
 import type { Permission, Role } from "@/types/api";
+import type { z } from "zod";
+
+type RoleFormInput = z.input<typeof roleFormSchema>;
+type RoleFormValues = z.output<typeof roleFormSchema>;
 
 export default function AdminRolesPage() {
   const queryClient = useQueryClient();
@@ -27,10 +34,6 @@ export default function AdminRolesPage() {
   const [savingPerms, setSavingPerms] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newDesc, setNewDesc] = useState("");
-  const [creating, setCreating] = useState(false);
-
   const [deleteTarget, setDeleteTarget] = useState<Role | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -46,8 +49,7 @@ export default function AdminRolesPage() {
   const roles = rolesRes?.data ?? [];
   const permissions = permsRes?.data ?? [];
 
-  const activeRole =
-    roles.find((r) => r.id === selectedRoleId) ?? roles[0] ?? null;
+  const activeRole = roles.find((r) => r.id === selectedRoleId) ?? roles[0] ?? null;
 
   const activePermissionIds = useMemo(() => {
     if (draftPermIds !== null) return draftPermIds;
@@ -64,6 +66,17 @@ export default function AdminRolesPage() {
     }
     return groups;
   }, [permissions]);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setError,
+    formState: { errors, isSubmitting },
+  } = useForm<RoleFormInput, unknown, RoleFormValues>({
+    resolver: zodResolver(roleFormSchema),
+    defaultValues: { name: "", description: "", permission_ids: [] },
+  });
 
   const selectRole = (role: Role) => {
     setSelectedRoleId(role.id);
@@ -87,32 +100,28 @@ export default function AdminRolesPage() {
       setDraftPermIds(null);
       await queryClient.invalidateQueries({ queryKey: ["admin-roles"] });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to save permissions.");
+      toast.error(getApiErrorMessage(err, "Failed to save permissions."));
     } finally {
       setSavingPerms(false);
     }
   };
 
-  const handleCreateRole = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setCreating(true);
+  const onCreateRole = async (values: RoleFormValues) => {
     try {
       const res = await adminApi.createRole({
-        name: newName.trim(),
-        description: newDesc.trim() || undefined,
+        name: values.name.trim(),
+        description: values.description?.trim() || undefined,
         permission_ids: [],
       });
       toast.success(`Role "${res.data.name}" created.`);
       setCreateOpen(false);
-      setNewName("");
-      setNewDesc("");
+      reset({ name: "", description: "", permission_ids: [] });
       await queryClient.invalidateQueries({ queryKey: ["admin-roles"] });
       setSelectedRoleId(res.data.id);
       setDraftPermIds([]);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to create role.");
-    } finally {
-      setCreating(false);
+      applyApiErrorsToForm(err, setError, ["name", "description"]);
+      toast.error(getApiErrorMessage(err, "Failed to create role."));
     }
   };
 
@@ -127,7 +136,7 @@ export default function AdminRolesPage() {
       setDraftPermIds(null);
       await queryClient.invalidateQueries({ queryKey: ["admin-roles"] });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Cannot delete role.");
+      toast.error(getApiErrorMessage(err, "Cannot delete role."));
     } finally {
       setDeleting(false);
     }
@@ -138,13 +147,19 @@ export default function AdminRolesPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Roles &amp; Permissions Matrix</h1>
-          <p className="text-sm text-black/60 dark:text-zinc-400">
+          <p className="text-sm text-muted-foreground">
             Database-driven RBAC. Changes immediately control backend API middleware and frontend
             visibility.
           </p>
         </div>
         {hasPermission("roles.create") && (
-          <Button onClick={() => setCreateOpen(true)} className="rounded-full">
+          <Button
+            onClick={() => {
+              reset({ name: "", description: "", permission_ids: [] });
+              setCreateOpen(true);
+            }}
+            className="rounded-full"
+          >
             <Plus className="h-4 w-4" /> Create Custom Role
           </Button>
         )}
@@ -164,8 +179,8 @@ export default function AdminRolesPage() {
                   onClick={() => selectRole(role)}
                   className={`flex items-start justify-between rounded-xl border p-4 transition-colors cursor-pointer ${
                     selected
-                      ? "border-black bg-black/5 dark:border-white dark:bg-zinc-800"
-                      : "border-black/10 bg-white hover:bg-black/[0.02] dark:border-zinc-800 dark:bg-zinc-900"
+                      ? "border-foreground bg-accent text-accent-foreground"
+                      : "border-border bg-card text-card-foreground hover:bg-accent/60 hover:text-accent-foreground"
                   }`}
                 >
                   <div>
@@ -182,10 +197,10 @@ export default function AdminRolesPage() {
                         </Badge>
                       )}
                     </div>
-                    <p className="mt-1 text-xs text-black/55 dark:text-zinc-400">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {role.description || "Custom role"}
                     </p>
-                    <p className="mt-1 text-[11px] text-black/45 dark:text-zinc-500">
+                    <p className="mt-1 text-[11px] text-muted-foreground">
                       {role.staff_count ?? 0} staff member(s)
                     </p>
                   </div>
@@ -194,12 +209,13 @@ export default function AdminRolesPage() {
                     <Button
                       variant="ghost"
                       size="icon"
+                      aria-label={`Delete ${role.name}`}
                       onClick={(e) => {
                         e.stopPropagation();
                         setDeleteTarget(role);
                       }}
                     >
-                      <Trash2 className="h-4 w-4 text-[#FF3333]" />
+                      <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
                     </Button>
                   )}
                 </div>
@@ -237,11 +253,8 @@ export default function AdminRolesPage() {
             </CardHeader>
             <CardContent className="space-y-5">
               {Object.entries(groupedPermissions).map(([group, perms]) => (
-                <div
-                  key={group}
-                  className="rounded-xl border border-black/10 dark:border-zinc-800 p-4"
-                >
-                  <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-black/60 dark:text-zinc-400">
+                <div key={group} className="rounded-xl border border-border p-4">
+                  <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">
                     {group}
                   </h3>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -265,7 +278,7 @@ export default function AdminRolesPage() {
                           <div>
                             <p className="font-mono text-xs font-semibold">{perm.name}</p>
                             {perm.description && (
-                              <p className="text-[11px] text-black/55 dark:text-zinc-400">
+                              <p className="text-[11px] text-muted-foreground">
                                 {perm.description}
                               </p>
                             )}
@@ -282,34 +295,45 @@ export default function AdminRolesPage() {
       )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Create Custom Role</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleCreateRole} className="space-y-4">
+          <form noValidate onSubmit={handleSubmit(onCreateRole)} className="space-y-4">
             <div className="space-y-1.5">
-              <Label>Role Name *</Label>
+              <Label htmlFor="role-name">Role Name *</Label>
               <Input
-                required
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
+                id="role-name"
                 placeholder="Inventory Auditor"
+                aria-invalid={Boolean(errors.name)}
+                {...register("name")}
               />
+              {errors.name && (
+                <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                  {errors.name.message}
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
-              <Label>Description</Label>
+              <Label htmlFor="role-desc">Description</Label>
               <Input
-                value={newDesc}
-                onChange={(e) => setNewDesc(e.target.value)}
+                id="role-desc"
                 placeholder="Reviews stock levels and adjusts inventory"
+                aria-invalid={Boolean(errors.description)}
+                {...register("description")}
               />
+              {errors.description && (
+                <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                  {errors.description.message}
+                </p>
+              )}
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={creating}>
-                {creating ? "Creating..." : "Create Role"}
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Creating..." : "Create Role"}
               </Button>
             </div>
           </form>

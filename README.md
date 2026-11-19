@@ -8,15 +8,15 @@ A production-grade, headless full-stack e-commerce platform built with **Laravel
 
 The application provides two cleanly separated interfaces backed by a single Laravel JSON API source of truth:
 
-1. **Customer-Facing Storefront (`SHOP.CO`)**: Implemented directly from the local Figma screenshots (`figma/` — Desktop `1440px` and Mobile `390px`), featuring Homepage, Category/Shop Listing with multi-facet filters & server-side pagination, Product Detail with multi-image gallery & variant selection, persistent MySQL Cart (plus guest cart localStorage merge on login), Coupon application, Checkout with Stripe Elements, Order Confirmation, and Order History/Tracking.
-2. **Staff-Facing Administration Panel (`/admin`)**: Built with Tailwind CSS, `shadcn/ui`, Lucide icons, and Recharts, featuring real-time DB dashboard analytics, 30-day sales chart, Products CRUD with multi-image upload & stock adjustment, 2-level Categories CRUD, Orders lifecycle & cancellation management, Coupons CRUD, Customers directory & order spending, Staff multi-role assignment, Database-Driven Roles & Permissions Matrix (with Super Admin protection), Staff Profile management, and Dark Mode.
+1. **Customer-Facing Storefront (`SHOP.CO`)**: Implemented directly from the local Figma screenshots (`figma/` — Desktop `1440px` and Mobile `390px`), featuring Homepage (dynamic dress-style category images, smooth 3s auto-sliding customer reviews carousel showing 1 card on mobile / 3 on desktop, SVG payment method logos), Category/Shop Listing (6 cards/page on mobile, 9 on desktop, shadcn `<Select>` sorting), Product Detail (multi-image gallery, dynamic reviews with exact DB count, Load More Reviews — 6 desktop / 3 mobile, Write a Review modal, interactive shadcn `<Accordion>` FAQs), persistent MySQL Cart (plus guest cart localStorage merge on login), Coupon application, Checkout with Stripe Elements, Order Confirmation, and Order History/Tracking.
+2. **Staff-Facing Administration Panel (`/admin`)**: Built with Tailwind CSS, official `shadcn/ui` (`components.json`, `base-nova`, zero Radix packages), Lucide icons, and Recharts, featuring fixed Sidebar & fixed Header, verified Dark Mode contrast, real-time DB dashboard analytics, 30-day sales chart, Products CRUD with multi-image upload & stock adjustment, 2-level Categories CRUD with image upload, Reviews & Ratings moderation (`/admin/reviews`), Orders lifecycle & cancellation management, Coupons CRUD, Customers directory & order spending, Staff multi-role assignment, Database-Driven Roles & Permissions Matrix (with Super Admin protection), and centered Staff Profile management.
 
 ---
 
 ## Technology Stack
 
 - **Backend**: Laravel `^13.17`, PHP `8.4`, MySQL `8.0+`, Laravel Sanctum `^4.5` (separate `customer` & `admin` guards), Stripe PHP SDK `^23.0`, Eloquent ORM, Form Requests, API Resources, Policies, Events/Listeners/Queued Mailables, `bcmath` exact decimal math, Pest `^5.3`, Laravel Pint.
-- **Frontend**: Next.js `16.4.6` (App Router, Turbopack, `proxy.ts`), React 19, TypeScript 5, Tailwind CSS 4, `shadcn/ui` (Radix UI primitives), Lucide icons, React Hook Form + Zod, TanStack Query, Recharts, Stripe.js & React Stripe.js, Sonner toasts.
+- **Frontend**: Next.js `16.4.6` (App Router, Turbopack, `proxy.ts`), React 19, TypeScript 5, Tailwind CSS 4, official `shadcn/ui` (`shadcn ^4.23` on `@base-ui/react`, zero `@radix-ui/*`), Lucide icons, React Hook Form + Zod (inline field errors across all forms), TanStack Query, Recharts, Stripe.js & React Stripe.js, Sonner toasts.
 - **Payments**: Stripe Test Mode (PaymentIntents + Stripe Elements + Webhook signature verification + server-side reconciliation).
 - **Mail / Local Testing**: Mailpit / Mailhog (SMTP `127.0.0.1:1025`).
 

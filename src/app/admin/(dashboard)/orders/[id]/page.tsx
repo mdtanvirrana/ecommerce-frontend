@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { OrderStatusBadge, PaymentStatusBadge } from "@/components/shared/StatusBadge";
-import { ApiError } from "@/lib/apiClient";
+import { getApiErrorMessage } from "@/lib/formErrors";
 import { formatDateTime, formatExactMoney } from "@/lib/utils";
 import type { OrderStatus } from "@/types/api";
 
@@ -27,6 +27,7 @@ export default function AdminOrderDetailPage() {
   const [updating, setUpdating] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["admin-order", params.id],
@@ -43,7 +44,7 @@ export default function AdminOrderDetailPage() {
       await refetch();
       await queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to update status.");
+      toast.error(getApiErrorMessage(err, "Failed to update status."));
     } finally {
       setUpdating(false);
     }
@@ -52,16 +53,23 @@ export default function AdminOrderDetailPage() {
   const handleCancel = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!order) return;
+    if (cancelReason.trim().length < 3) {
+      setCancelError("Please enter a brief cancellation reason (at least 3 characters).");
+      return;
+    }
+    setCancelError(null);
     setUpdating(true);
     try {
-      await adminApi.cancelOrder(order.id, cancelReason || undefined);
+      await adminApi.cancelOrder(order.id, cancelReason.trim());
       toast.success("Order cancelled and stock restored atomically.");
       setCancelOpen(false);
       setCancelReason("");
       await refetch();
       await queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to cancel order.");
+      const msg = getApiErrorMessage(err, "Failed to cancel order.");
+      setCancelError(msg);
+      toast.error(msg);
     } finally {
       setUpdating(false);
     }
@@ -88,18 +96,22 @@ export default function AdminOrderDetailPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Button asChild variant="outline" size="icon">
-            <Link href="/admin/orders">
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Back to orders"
+            render={<Link href="/admin/orders" />}
+            nativeButton={false}
+          >
+            <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2.5">
               <h1 className="text-2xl font-bold">{order.order_number}</h1>
               <OrderStatusBadge status={order.status} />
               <PaymentStatusBadge status={order.payment_status} />
             </div>
-            <p className="text-xs text-black/55 dark:text-zinc-400">
+            <p className="text-xs text-muted-foreground">
               Created {formatDateTime(order.created_at)}
             </p>
           </div>
@@ -123,7 +135,10 @@ export default function AdminOrderDetailPage() {
             <Button
               variant="destructive"
               disabled={updating}
-              onClick={() => setCancelOpen(true)}
+              onClick={() => {
+                setCancelError(null);
+                setCancelOpen(true);
+              }}
             >
               <Ban className="h-4 w-4" /> Cancel Order
             </Button>
@@ -137,19 +152,20 @@ export default function AdminOrderDetailPage() {
             <CardTitle>Order Items</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="divide-y divide-black/10 dark:divide-zinc-800">
+            <div className="divide-y divide-border">
               {(order.items ?? []).map((item) => (
                 <div key={item.id} className="flex items-center justify-between gap-4 py-3.5">
                   <div className="flex items-center gap-3">
                     <img
                       src={item.image_url || "/images/style-casual.jpg"}
                       alt={item.product_name}
-                      className="h-14 w-14 rounded-lg bg-[#F0EEED] object-cover"
+                      className="h-14 w-14 rounded-lg bg-muted object-cover border border-border"
                     />
                     <div>
                       <p className="font-semibold text-sm">{item.product_name}</p>
-                      <p className="text-xs text-black/55 dark:text-zinc-400">
-                        SKU: {item.product_sku} • {formatExactMoney(item.unit_price)} × {item.quantity}
+                      <p className="text-xs text-muted-foreground">
+                        SKU: {item.product_sku} • {formatExactMoney(item.unit_price)} ×{" "}
+                        {item.quantity}
                         {item.selected_size ? ` • ${item.selected_size}` : ""}
                         {item.selected_color ? ` • ${item.selected_color}` : ""}
                       </p>
@@ -160,22 +176,22 @@ export default function AdminOrderDetailPage() {
               ))}
             </div>
 
-            <div className="mt-4 space-y-2 border-t border-black/10 dark:border-zinc-800 pt-4 text-sm">
+            <div className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
               <div className="flex justify-between">
-                <span className="text-black/60 dark:text-zinc-400">Subtotal</span>
+                <span className="text-muted-foreground">Subtotal</span>
                 <span>{formatExactMoney(order.subtotal)}</span>
               </div>
               {Number(order.discount_amount) > 0 && (
-                <div className="flex justify-between text-[#FF3333]">
+                <div className="flex justify-between text-red-600 dark:text-red-400">
                   <span>Discount ({order.coupon_code})</span>
                   <span>-{formatExactMoney(order.discount_amount)}</span>
                 </div>
               )}
               <div className="flex justify-between">
-                <span className="text-black/60 dark:text-zinc-400">Shipping</span>
+                <span className="text-muted-foreground">Shipping</span>
                 <span>{formatExactMoney(order.shipping_amount)}</span>
               </div>
-              <div className="flex justify-between border-t border-black/10 dark:border-zinc-800 pt-2 text-base font-bold">
+              <div className="flex justify-between border-t border-border pt-2 text-base font-bold">
                 <span>Total</span>
                 <span>{formatExactMoney(order.total_amount)}</span>
               </div>
@@ -190,15 +206,15 @@ export default function AdminOrderDetailPage() {
             </CardHeader>
             <CardContent className="space-y-1.5 text-sm">
               <p className="font-semibold">{order.shipping.full_name}</p>
-              <p className="text-black/65 dark:text-zinc-400">{order.shipping.email}</p>
-              <p className="text-black/65 dark:text-zinc-400">{order.shipping.phone}</p>
-              <hr className="my-2 border-black/10 dark:border-zinc-800" />
+              <p className="text-muted-foreground">{order.shipping.email}</p>
+              <p className="text-muted-foreground">{order.shipping.phone}</p>
+              <hr className="my-2 border-border" />
               <p>{order.shipping.address}</p>
               <p>
                 {order.shipping.city}, {order.shipping.postal_code}
               </p>
               {order.shipping.delivery_instructions && (
-                <p className="pt-1 text-xs text-black/55">
+                <p className="pt-1 text-xs text-muted-foreground">
                   Note: {order.shipping.delivery_instructions}
                 </p>
               )}
@@ -211,20 +227,22 @@ export default function AdminOrderDetailPage() {
             </CardHeader>
             <CardContent className="space-y-2 text-xs">
               <p>
-                <span className="text-black/55 dark:text-zinc-400">Stock Deducted:</span>{" "}
+                <span className="text-muted-foreground">Stock Deducted:</span>{" "}
                 <span className="font-medium">{formatDateTime(order.stock_deducted_at)}</span>
               </p>
               <p>
-                <span className="text-black/55 dark:text-zinc-400">Stock Restored:</span>{" "}
+                <span className="text-muted-foreground">Stock Restored:</span>{" "}
                 <span className="font-medium">{formatDateTime(order.stock_restored_at)}</span>
               </p>
               {order.cancellation_reason && (
-                <p className="text-[#FF3333]">Cancel Reason: {order.cancellation_reason}</p>
+                <p className="text-red-600 dark:text-red-400">
+                  Cancel Reason: {order.cancellation_reason}
+                </p>
               )}
               {(order.payments ?? []).map((p) => (
                 <div
                   key={p.id}
-                  className="mt-2 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 p-3 space-y-1"
+                  className="mt-2 rounded-lg bg-muted/60 p-3 space-y-1"
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-semibold uppercase">{p.provider}</span>
@@ -232,10 +250,12 @@ export default function AdminOrderDetailPage() {
                   </div>
                   <p className="font-mono break-all">PI: {p.stripe_payment_intent_id ?? "—"}</p>
                   {p.stripe_refund_id && (
-                    <p className="font-mono break-all text-blue-600">Refund: {p.stripe_refund_id}</p>
+                    <p className="font-mono break-all text-blue-600 dark:text-blue-400">
+                      Refund: {p.stripe_refund_id}
+                    </p>
                   )}
                   {p.failure_message && (
-                    <p className="text-[#FF3333]">Error: {p.failure_message}</p>
+                    <p className="text-red-600 dark:text-red-400">Error: {p.failure_message}</p>
                   )}
                 </div>
               ))}
@@ -245,22 +265,32 @@ export default function AdminOrderDetailPage() {
       </div>
 
       <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Cancel {order.order_number}?</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleCancel} className="space-y-4">
-            <p className="text-sm text-black/65 dark:text-zinc-400">
+          <form noValidate onSubmit={handleCancel} className="space-y-4">
+            <p className="text-sm text-muted-foreground">
               If this order was paid, cancelling will atomically restore product inventory once and
               initiate a Stripe refund when configured.
             </p>
             <div className="space-y-1.5">
-              <Label>Cancellation Reason</Label>
+              <Label htmlFor="cancel-reason">Cancellation Reason *</Label>
               <Input
+                id="cancel-reason"
+                aria-invalid={Boolean(cancelError)}
                 value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
+                onChange={(e) => {
+                  setCancelReason(e.target.value);
+                  setCancelError(null);
+                }}
                 placeholder="Customer requested cancellation"
               />
+              {cancelError && (
+                <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                  {cancelError}
+                </p>
+              )}
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setCancelOpen(false)}>

@@ -2,6 +2,8 @@
 
 import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Controller, useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Edit, Plus, ShieldAlert, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/services/api";
@@ -16,9 +18,21 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ApiError } from "@/lib/apiClient";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { applyApiErrorsToForm, getApiErrorMessage } from "@/lib/formErrors";
+import { staffFormSchema } from "@/schemas";
 import type { Staff } from "@/types/api";
+import type { z } from "zod";
+
+type StaffFormInput = z.input<typeof staffFormSchema>;
+type StaffFormValues = z.output<typeof staffFormSchema>;
 
 export default function AdminStaffPage() {
   const queryClient = useQueryClient();
@@ -26,13 +40,6 @@ export default function AdminStaffPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Staff | null>(null);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
-  const [isActive, setIsActive] = useState(true);
-  const [selectedRoleIds, setSelectedRoleIds] = useState<number[]>([]);
-  const [saving, setSaving] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<Staff | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -50,52 +57,96 @@ export default function AdminStaffPage() {
   const staffList = staffRes?.data ?? [];
   const roles = rolesRes?.data ?? [];
 
+  const {
+    register,
+    handleSubmit,
+    control,
+    reset,
+    watch,
+    setValue,
+    setError,
+    formState: { errors, isSubmitting },
+  } = useForm<StaffFormInput, unknown, StaffFormValues>({
+    resolver: zodResolver(staffFormSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      phone: "",
+      password: "",
+      is_active: true,
+      role_ids: [],
+    },
+  });
+
+  const selectedRoleIds = watch("role_ids") ?? [];
+
   const openCreate = () => {
     setEditing(null);
-    setName("");
-    setEmail("");
-    setPhone("");
-    setPassword("");
-    setIsActive(true);
     const defaultRole = roles.find((r) => !r.is_super_admin);
-    setSelectedRoleIds(defaultRole ? [defaultRole.id] : []);
+    reset({
+      name: "",
+      email: "",
+      phone: "",
+      password: "",
+      is_active: true,
+      role_ids: defaultRole ? [defaultRole.id] : [],
+    });
     setDialogOpen(true);
   };
 
   const openEdit = (member: Staff) => {
     setEditing(member);
-    setName(member.name);
-    setEmail(member.email);
-    setPhone(member.phone ?? "");
-    setPassword("");
-    setIsActive(member.is_active);
-    setSelectedRoleIds((member.roles ?? []).map((r) => r.id));
+    reset({
+      name: member.name,
+      email: member.email,
+      phone: member.phone ?? "",
+      password: "",
+      is_active: member.is_active,
+      role_ids: (member.roles ?? []).map((r) => r.id),
+    });
     setDialogOpen(true);
   };
 
   const toggleRole = (roleId: number) => {
-    setSelectedRoleIds((prev) =>
-      prev.includes(roleId) ? prev.filter((id) => id !== roleId) : [...prev, roleId],
-    );
+    const next = selectedRoleIds.includes(roleId)
+      ? selectedRoleIds.filter((id) => id !== roleId)
+      : [...selectedRoleIds, roleId];
+    setValue("role_ids", next, { shouldValidate: true });
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (selectedRoleIds.length === 0) {
-      toast.error("Assign at least one role.");
+  const onSubmit = async (values: StaffFormValues) => {
+    const rawPassword = values.password?.trim() ?? "";
+    if (!editing && rawPassword.length < 8) {
+      setError("password", {
+        type: "manual",
+        message: "Password is required and must be at least 8 characters.",
+      });
       return;
     }
-    setSaving(true);
+    if (
+      rawPassword &&
+      (!/[A-Z]/.test(rawPassword) ||
+        !/[a-z]/.test(rawPassword) ||
+        !/[0-9]/.test(rawPassword) ||
+        !/[^A-Za-z0-9]/.test(rawPassword))
+    ) {
+      setError("password", {
+        type: "manual",
+        message: "Password must include uppercase, lowercase, number, and symbol.",
+      });
+      return;
+    }
+
     try {
       const payload: Record<string, unknown> = {
-        name: name.trim(),
-        email: email.trim(),
-        phone: phone.trim() || null,
-        is_active: isActive,
-        role_ids: selectedRoleIds,
+        name: values.name.trim(),
+        email: values.email.trim(),
+        phone: values.phone?.trim() || null,
+        is_active: values.is_active,
+        role_ids: values.role_ids,
       };
-      if (password.trim()) {
-        payload.password = password;
+      if (rawPassword) {
+        payload.password = rawPassword;
       }
 
       if (editing) {
@@ -108,9 +159,14 @@ export default function AdminStaffPage() {
       setDialogOpen(false);
       await queryClient.invalidateQueries({ queryKey: ["admin-staff"] });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to save staff member.");
-    } finally {
-      setSaving(false);
+      applyApiErrorsToForm(err, setError, [
+        "name",
+        "email",
+        "phone",
+        "password",
+        "role_ids",
+      ]);
+      toast.error(getApiErrorMessage(err, "Failed to save staff member."));
     }
   };
 
@@ -123,7 +179,7 @@ export default function AdminStaffPage() {
       setDeleteTarget(null);
       await queryClient.invalidateQueries({ queryKey: ["admin-staff"] });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Cannot delete staff member.");
+      toast.error(getApiErrorMessage(err, "Cannot delete staff member."));
     } finally {
       setDeleting(false);
     }
@@ -134,7 +190,7 @@ export default function AdminStaffPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Staff Management</h1>
-          <p className="text-sm text-black/60 dark:text-zinc-400">
+          <p className="text-sm text-muted-foreground">
             Assign one or multiple database roles to staff accounts. Super Admin accounts are
             protected.
           </p>
@@ -179,29 +235,44 @@ export default function AdminStaffPage() {
                             </Badge>
                           )}
                         </div>
-                        <div className="text-xs text-black/55 dark:text-zinc-400">{member.email}</div>
+                        <div className="text-xs text-muted-foreground">{member.email}</div>
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
                           {(member.roles ?? []).map((r) => (
-                            <Badge key={r.id} variant={r.is_super_admin ? "default" : "secondary"}>
+                            <Badge
+                              key={r.id}
+                              variant={r.is_super_admin ? "default" : "secondary"}
+                            >
                               {r.name}
                             </Badge>
                           ))}
                         </div>
                       </TableCell>
-                      <TableCell className="text-xs text-black/60 dark:text-zinc-400">
+                      <TableCell className="text-xs text-muted-foreground">
                         {member.permissions.length} permission(s)
                       </TableCell>
                       <TableCell>
-                        <Badge variant={member.is_active ? "success" : "secondary"}>
+                        <Badge
+                          variant={member.is_active ? "outline" : "secondary"}
+                          className={
+                            member.is_active
+                              ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                              : ""
+                          }
+                        >
                           {member.is_active ? "Active" : "Inactive"}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="inline-flex gap-1">
                           {hasPermission("staff.edit") && !protectedTarget && (
-                            <Button variant="ghost" size="icon" onClick={() => openEdit(member)}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Edit ${member.name}`}
+                              onClick={() => openEdit(member)}
+                            >
                               <Edit className="h-4 w-4" />
                             </Button>
                           )}
@@ -209,9 +280,10 @@ export default function AdminStaffPage() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              aria-label={`Delete ${member.name}`}
                               onClick={() => setDeleteTarget(member)}
                             >
-                              <Trash2 className="h-4 w-4 text-[#FF3333]" />
+                              <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
                             </Button>
                           )}
                         </div>
@@ -226,39 +298,77 @@ export default function AdminStaffPage() {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? `Edit ${editing.name}` : "Add Staff Member"}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSave} className="space-y-4">
+          <form noValidate onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label>Full Name *</Label>
-                <Input required value={name} onChange={(e) => setName(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Email *</Label>
-                <Input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Phone</Label>
-                <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>{editing ? "New Password (optional)" : "Password *"}</Label>
+                <Label htmlFor="staff-create-name">Full Name *</Label>
                 <Input
-                  required={!editing}
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Min 8 chars, mixed, number, symbol"
+                  id="staff-create-name"
+                  aria-invalid={Boolean(errors.name)}
+                  {...register("name")}
                 />
+                {errors.name && (
+                  <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                    {errors.name.message}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="staff-create-email">Email *</Label>
+                <Input
+                  id="staff-create-email"
+                  type="email"
+                  aria-invalid={Boolean(errors.email)}
+                  {...register("email")}
+                />
+                {errors.email && (
+                  <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                    {errors.email.message}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="staff-create-phone">Phone</Label>
+                <Input
+                  id="staff-create-phone"
+                  aria-invalid={Boolean(errors.phone)}
+                  {...register("phone")}
+                />
+                {errors.phone && (
+                  <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                    {errors.phone.message}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="staff-create-password">
+                  {editing ? "New Password (optional)" : "Password *"}
+                </Label>
+                <Input
+                  id="staff-create-password"
+                  type="password"
+                  aria-invalid={Boolean(errors.password)}
+                  placeholder="Min 8 chars, mixed, number, symbol"
+                  {...register("password")}
+                />
+                {errors.password && (
+                  <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                    {errors.password.message}
+                  </p>
+                )}
               </div>
             </div>
 
             <div className="space-y-2">
               <Label>Assign Roles (multiple allowed) *</Label>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 rounded-xl border border-black/10 dark:border-zinc-800 p-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 rounded-xl border border-border p-3">
                 {roles.map((r) => {
                   const disabled = r.is_super_admin && !currentStaff?.is_super_admin;
                   return (
@@ -276,20 +386,35 @@ export default function AdminStaffPage() {
                   );
                 })}
               </div>
+              {errors.role_ids && (
+                <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                  {errors.role_ids.message}
+                </p>
+              )}
             </div>
 
             {!editing?.is_super_admin && (
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <Switch checked={isActive} onCheckedChange={setIsActive} /> Active account
-              </label>
+              <Controller
+                name="is_active"
+                control={control}
+                render={({ field }) => (
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <Switch
+                      checked={Boolean(field.value)}
+                      onCheckedChange={(checked) => field.onChange(checked)}
+                    />
+                    Active account
+                  </label>
+                )}
+              />
             )}
 
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={saving}>
-                {saving ? "Saving..." : "Save Staff"}
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Saving..." : "Save Staff"}
               </Button>
             </div>
           </form>

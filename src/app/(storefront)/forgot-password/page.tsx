@@ -9,6 +9,7 @@ import { forgotPasswordSchema } from "@/schemas";
 import { customerAuthApi } from "@/services/api";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { applyApiErrorsToForm, getApiErrorMessage } from "@/lib/formErrors";
 import type { z } from "zod";
 
 type ForgotValues = z.infer<typeof forgotPasswordSchema>;
@@ -18,6 +19,7 @@ export default function ForgotPasswordPage() {
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<ForgotValues>({ resolver: zodResolver(forgotPasswordSchema) });
 
@@ -26,8 +28,13 @@ export default function ForgotPasswordPage() {
       await customerAuthApi.forgotPassword(values.email);
       setSent(true);
       toast.success("Password reset instructions sent.");
-    } catch {
-      toast.error("Unable to send password reset email.");
+    } catch (err) {
+      const mapped = applyApiErrorsToForm(err, setError, ["email"]);
+      const message = getApiErrorMessage(err, "Unable to send password reset email.");
+      if (!mapped) {
+        setError("email", { type: "server", message });
+      }
+      toast.error(message);
     }
   };
 
@@ -48,11 +55,20 @@ export default function ForgotPasswordPage() {
             </Link>
           </div>
         ) : (
-          <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4">
+          <form noValidate onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="email">Account Email</Label>
-              <Input id="email" type="email" {...register("email")} />
-              {errors.email && <p className="text-xs text-[#FF3333]">{errors.email.message}</p>}
+              <Input
+                id="email"
+                type="email"
+                aria-invalid={Boolean(errors.email)}
+                {...register("email")}
+              />
+              {errors.email && (
+                <p role="alert" className="text-xs font-medium text-[#FF3333]">
+                  {errors.email.message}
+                </p>
+              )}
             </div>
             <button
               type="submit"

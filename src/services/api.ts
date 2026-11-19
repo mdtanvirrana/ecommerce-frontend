@@ -1,5 +1,6 @@
 import { apiRequest } from "@/lib/apiClient";
 import type {
+  AdminReviewsPayload,
   CartSummary,
   Category,
   CheckoutResponse,
@@ -11,17 +12,34 @@ import type {
   Permission,
   Product,
   ProductDetailPayload,
+  Review,
   Role,
   Staff,
 } from "@/types/api";
 
-// ============ Public Catalog ============
+// ============ Public Catalog & Reviews ============
 export const catalogApi = {
   getProducts: (params?: Record<string, string | number | boolean | undefined>) =>
     apiRequest<Product[]>("products", { params }),
 
   getProductBySlug: (slug: string) =>
     apiRequest<ProductDetailPayload>(`products/${encodeURIComponent(slug)}`),
+
+  getProductReviews: (
+    slug: string,
+    params?: { page?: number; per_page?: number; sort?: string },
+  ) =>
+    apiRequest<Review[]>(`products/${encodeURIComponent(slug)}/reviews`, {
+      params,
+    }),
+
+  submitProductReview: (slug: string, payload: { rating: number; comment: string }) =>
+    apiRequest<Review>(`products/${encodeURIComponent(slug)}/reviews`, {
+      method: "POST",
+      body: payload,
+    }),
+
+  getFeaturedReviews: () => apiRequest<Review[]>("reviews/featured"),
 
   getCategories: () => apiRequest<Category[]>("categories"),
 
@@ -225,18 +243,44 @@ export const adminApi = {
   deleteProduct: (id: number) =>
     apiRequest<null>(`admin/products/${id}`, { method: "DELETE" }),
 
-  // Categories
+  // Categories (FormData supported for category image uploads)
   getCategories: (flat = false) =>
     apiRequest<Category[]>("admin/categories", { params: { flat: flat ? 1 : undefined } }),
 
-  createCategory: (payload: Record<string, unknown>) =>
-    apiRequest<Category>("admin/categories", { method: "POST", body: payload }),
+  createCategory: (payload: FormData | Record<string, unknown>) =>
+    apiRequest<Category>("admin/categories", {
+      method: "POST",
+      body: payload,
+      isFormData: payload instanceof FormData,
+    }),
 
-  updateCategory: (id: number, payload: Record<string, unknown>) =>
-    apiRequest<Category>(`admin/categories/${id}`, { method: "PUT", body: payload }),
+  updateCategory: (id: number, payload: FormData | Record<string, unknown>) =>
+    apiRequest<Category>(`admin/categories/${id}`, {
+      method: payload instanceof FormData ? "POST" : "PUT",
+      body: payload,
+      isFormData: payload instanceof FormData,
+    }),
 
   deleteCategory: (id: number) =>
     apiRequest<null>(`admin/categories/${id}`, { method: "DELETE" }),
+
+  // Reviews & Ratings Moderation
+  getReviews: (params?: Record<string, string | number | boolean | undefined>) =>
+    apiRequest<AdminReviewsPayload>("admin/reviews", { params }),
+
+  updateReview: (
+    id: number,
+    payload: Partial<{
+      rating: number;
+      comment: string;
+      is_approved: boolean;
+      is_featured: boolean;
+      is_verified_purchase: boolean;
+    }>,
+  ) => apiRequest<Review>(`admin/reviews/${id}`, { method: "PATCH", body: payload }),
+
+  deleteReview: (id: number) =>
+    apiRequest<null>(`admin/reviews/${id}`, { method: "DELETE" }),
 
   // Orders
   getOrders: (params?: Record<string, string | number | undefined>) =>

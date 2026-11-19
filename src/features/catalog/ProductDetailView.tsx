@@ -2,26 +2,86 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
-import { Check, CheckCircle2, Minus, MoreHorizontal, Plus, SlidersHorizontal } from "lucide-react";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  Check,
+  CheckCircle2,
+  Loader2,
+  Minus,
+  Plus,
+  SlidersHorizontal,
+  Star,
+} from "lucide-react";
+import { toast } from "sonner";
 import { catalogApi } from "@/services/api";
 import { useCart } from "@/providers/CartProvider";
+import { useCustomerAuth } from "@/providers/CustomerAuthProvider";
 import { Breadcrumb } from "@/components/storefront/Breadcrumb";
 import { ProductCard } from "@/components/storefront/ProductCard";
 import { StarRating } from "@/components/storefront/StarRating";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PRODUCT_FAQS, PRODUCT_REVIEWS } from "@/constants/storefront";
-import { cn, formatMoney, getColorHex } from "@/lib/utils";
-import type { ApiResponse, ProductDetailPayload } from "@/types/api";
+import { Textarea } from "@/components/ui/textarea";
+import { PRODUCT_FAQS } from "@/constants/storefront";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { applyApiErrorsToForm, getApiErrorMessage } from "@/lib/formErrors";
+import { cn, formatDate, formatMoney, getColorHex } from "@/lib/utils";
+import { reviewFormSchema } from "@/schemas";
+import type { ApiResponse, ProductDetailPayload, Review } from "@/types/api";
+import type { z } from "zod";
+
+type ReviewFormInput = z.input<typeof reviewFormSchema>;
+type ReviewFormValues = z.output<typeof reviewFormSchema>;
+
+const REVIEW_SORT_OPTIONS: Record<string, string> = {
+  latest: "Latest",
+  highest: "Highest Rated",
+  lowest: "Lowest Rated",
+};
 
 export function ProductDetailView({
   slug,
   initialDetail,
+  initialReviews,
 }: {
   slug: string;
   initialDetail?: ApiResponse<ProductDetailPayload> | null;
+  initialReviews?: ApiResponse<Review[]> | null;
 }) {
+  const queryClient = useQueryClient();
   const { addToCart, mutating } = useCart();
+  const { customer } = useCustomerAuth();
+  const isMobile = useMediaQuery("(max-width: 767px)", false);
+  const reviewsPerPage = isMobile ? 3 : 6;
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["storefront-product", slug],
@@ -37,6 +97,85 @@ export function ProductDetailView({
   const [selectedSize, setSelectedSize] = useState<string>("");
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState<"details" | "reviews" | "faqs">("reviews");
+  const [reviewSort, setReviewSort] = useState<"latest" | "highest" | "lowest">("latest");
+  const [writeDialogOpen, setWriteDialogOpen] = useState(false);
+
+  const useInitialReviews =
+    !isMobile && reviewSort === "latest" && Boolean(initialReviews);
+
+  const {
+    data: reviewsPages,
+    isLoading: loadingReviews,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ["product-reviews", slug, reviewSort, reviewsPerPage],
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) =>
+      catalogApi.getProductReviews(slug, {
+        page: pageParam,
+        per_page: reviewsPerPage,
+        sort: reviewSort,
+      }),
+    getNextPageParam: (lastPage) => {
+      const current = lastPage.meta?.current_page ?? 1;
+      const last = lastPage.meta?.last_page ?? 1;
+      return current < last ? current + 1 : undefined;
+    },
+    initialData:
+      useInitialReviews && initialReviews
+        ? { pages: [initialReviews], pageParams: [1] }
+        : undefined,
+  });
+
+  const loadedReviews = reviewsPages
+    ? reviewsPages.pages.flatMap((page) => page.data ?? [])
+    : isMobile && initialReviews
+      ? (initialReviews.data ?? []).slice(0, 3)
+      : [];
+
+  const exactTotalReviews =
+    reviewsPages?.pages?.[0]?.meta?.total ??
+    initialReviews?.meta?.total ??
+    product?.reviews_count ??
+    0;
+
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    reset,
+    setError,
+    formState: { errors },
+  } = useForm<ReviewFormInput, unknown, ReviewFormValues>({
+    resolver: zodResolver(reviewFormSchema),
+    defaultValues: {
+      rating: 5,
+      comment: "",
+    },
+  });
+
+  const watchedRating = Number(watch("rating") ?? 5);
+
+  const submitReviewMutation = useMutation({
+    mutationFn: (payload: ReviewFormValues) =>
+      catalogApi.submitProductReview(slug, payload),
+    onSuccess: () => {
+      toast.success("Thank you! Your review has been published.");
+      reset({ rating: 5, comment: "" });
+      setWriteDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["product-reviews", slug] });
+      queryClient.invalidateQueries({ queryKey: ["storefront-product", slug] });
+    },
+    onError: (err) => {
+      const mapped = applyApiErrorsToForm(err, setError, ["rating", "comment"]);
+      if (!mapped) {
+        toast.error(getApiErrorMessage(err, "Could not submit your review."));
+      }
+    },
+  });
 
   const resolvedColor =
     selectedColor && product?.colors?.includes(selectedColor)
@@ -132,7 +271,7 @@ export function ProductDetailView({
 
       {/* TOP PRODUCT SECTION — Exact Product Detail Page.jpg & (1).jpg Layout */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-10">
-        {/* Left Image Gallery: Desktop thumbnails left + large image right; Mobile large top + 3 thumbs bottom */}
+        {/* Left Image Gallery */}
         <div className="flex flex-col-reverse gap-3.5 sm:flex-row lg:col-span-6">
           <div className="grid grid-cols-3 gap-3 sm:flex sm:w-[152px] sm:shrink-0 sm:flex-col sm:gap-3.5">
             {gallery.slice(0, 4).map((img, idx) => (
@@ -142,7 +281,9 @@ export function ProductDetailView({
                 onClick={() => setActiveImageIdx(idx)}
                 className={cn(
                   "aspect-square sm:h-[167px] sm:w-[152px] overflow-hidden rounded-[20px] bg-[#F0EEED] border transition-colors cursor-pointer",
-                  idx === activeImageIdx ? "border-black" : "border-transparent hover:border-black/30",
+                  idx === activeImageIdx
+                    ? "border-black"
+                    : "border-transparent hover:border-black/30",
                 )}
               >
                 <img
@@ -384,57 +525,140 @@ export function ProductDetailView({
               <div className="flex items-baseline gap-2">
                 <h2 className="text-xl sm:text-2xl font-bold text-black">All Reviews</h2>
                 <span className="text-sm sm:text-base text-black/60">
-                  ({product.reviews_count || PRODUCT_REVIEWS.length})
+                  ({exactTotalReviews})
                 </span>
               </div>
               <div className="flex items-center gap-2.5">
                 <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#F0F0F0]">
                   <SlidersHorizontal className="h-4 w-4 text-black" />
                 </span>
-                <span className="hidden sm:inline-flex h-10 items-center rounded-full bg-[#F0F0F0] px-5 text-sm font-medium">
-                  Latest
-                </span>
-                <Link
-                  href="/orders"
-                  className="inline-flex h-10 items-center rounded-full bg-black px-5 text-xs sm:text-sm font-medium text-white hover:bg-black/85"
+                <Select
+                  value={reviewSort}
+                  items={REVIEW_SORT_OPTIONS}
+                  onValueChange={(value) => {
+                    if (value === "latest" || value === "highest" || value === "lowest") {
+                      setReviewSort(value);
+                    }
+                  }}
+                >
+                  <SelectTrigger
+                    aria-label="Sort reviews"
+                    className="h-10 min-w-[132px] rounded-full border-transparent bg-[#F0F0F0] px-4 text-xs sm:text-sm font-medium text-black"
+                  >
+                    <SelectValue>{REVIEW_SORT_OPTIONS[reviewSort]}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent align="end">
+                    {Object.entries(REVIEW_SORT_OPTIONS).map(([val, label]) => (
+                      <SelectItem key={val} value={val}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <button
+                  type="button"
+                  onClick={() => setWriteDialogOpen(true)}
+                  className="inline-flex h-10 items-center rounded-full bg-black px-5 text-xs sm:text-sm font-medium text-white transition-colors hover:bg-black/85 cursor-pointer"
                 >
                   Write a Review
-                </Link>
+                </button>
               </div>
             </div>
 
-            <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
-              {PRODUCT_REVIEWS.map((rev) => (
-                <article
-                  key={rev.name}
-                  className="rounded-[20px] border border-black/10 p-6 sm:px-8 sm:py-7"
+            {loadingReviews && loadedReviews.length === 0 ? (
+              <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
+                {Array.from({ length: reviewsPerPage }).map((_, i) => (
+                  <Skeleton key={i} className="h-48 w-full rounded-[20px]" />
+                ))}
+              </div>
+            ) : loadedReviews.length === 0 ? (
+              <div className="mt-6 rounded-[20px] border border-black/10 p-10 text-center">
+                <p className="text-base font-semibold text-black">No reviews yet</p>
+                <p className="mt-1 text-sm text-black/60">
+                  Be the first customer to share feedback about this product.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setWriteDialogOpen(true)}
+                  className="mt-4 inline-flex h-10 items-center rounded-full bg-black px-6 text-sm font-medium text-white hover:bg-black/85 cursor-pointer"
                 >
-                  <div className="flex items-center justify-between">
-                    <StarRating rating={rev.rating} showText={false} size="md" />
-                    <MoreHorizontal className="h-5 w-5 text-black/40" />
+                  Write a Review
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
+                  {loadedReviews.map((rev) => (
+                    <article
+                      key={rev.id}
+                      className="flex flex-col justify-between rounded-[20px] border border-black/10 bg-white p-6 sm:px-8 sm:py-7"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <StarRating rating={rev.rating} showText={false} size="md" />
+                        </div>
+                        <div className="mt-3.5 flex items-center gap-1.5">
+                          <h3 className="text-base sm:text-xl font-bold text-black">
+                            {rev.reviewer_name}
+                          </h3>
+                          {rev.is_verified_purchase && (
+                            <CheckCircle2
+                              aria-label="Verified purchase"
+                              className="h-5 w-5 shrink-0 fill-[#01AB31] text-white"
+                            />
+                          )}
+                        </div>
+                        <p className="mt-2.5 text-sm sm:text-base leading-relaxed text-black/60">
+                          &ldquo;{rev.comment}&rdquo;
+                        </p>
+                      </div>
+                      <p className="mt-5 text-sm font-medium text-black/60">
+                        Posted on {formatDate(rev.created_at)}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+
+                {/* Load More Reviews Button */}
+                {hasNextPage && (
+                  <div className="mt-8 text-center">
+                    <button
+                      type="button"
+                      disabled={isFetchingNextPage}
+                      onClick={() => fetchNextPage()}
+                      className="inline-flex h-[48px] sm:h-[52px] min-w-[230px] items-center justify-center gap-2 rounded-full border border-black/15 bg-white px-9 text-sm sm:text-base font-medium text-black transition-colors hover:bg-black hover:text-white disabled:opacity-50 cursor-pointer"
+                    >
+                      {isFetchingNextPage && <Loader2 className="h-4 w-4 animate-spin" />}
+                      {isFetchingNextPage ? "Loading..." : "Load More Reviews"}
+                    </button>
+                    <p className="mt-2 text-xs text-black/50">
+                      Showing {loadedReviews.length} of {exactTotalReviews} reviews
+                    </p>
                   </div>
-                  <div className="mt-3.5 flex items-center gap-1.5">
-                    <h3 className="text-base sm:text-xl font-bold text-black">{rev.name}</h3>
-                    <CheckCircle2 className="h-5 w-5 fill-[#01AB31] text-white" />
-                  </div>
-                  <p className="mt-2.5 text-sm sm:text-base leading-relaxed text-black/60">
-                    &ldquo;{rev.quote}&rdquo;
-                  </p>
-                  <p className="mt-5 text-sm font-medium text-black/60">{rev.date}</p>
-                </article>
-              ))}
-            </div>
+                )}
+              </>
+            )}
           </div>
         )}
 
         {activeTab === "faqs" && (
-          <div className="mt-8 space-y-4">
-            {PRODUCT_FAQS.map((faq) => (
-              <div key={faq.question} className="rounded-[20px] border border-black/10 p-6">
-                <h3 className="text-base sm:text-lg font-bold text-black">{faq.question}</h3>
-                <p className="mt-2 text-sm sm:text-base text-black/60">{faq.answer}</p>
-              </div>
-            ))}
+          <div className="mt-8 rounded-[20px] border border-black/10 bg-white px-6 py-2 sm:px-8">
+            <Accordion defaultValue={["faq-0"]}>
+              {PRODUCT_FAQS.map((faq, idx) => (
+                <AccordionItem
+                  key={faq.question}
+                  value={`faq-${idx}`}
+                  className="border-black/10"
+                >
+                  <AccordionTrigger className="py-5 text-base sm:text-lg font-semibold text-black hover:no-underline hover:text-black/80 cursor-pointer">
+                    {faq.question}
+                  </AccordionTrigger>
+                  <AccordionContent className="pb-5 text-sm sm:text-base leading-relaxed text-black/65">
+                    {faq.answer}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
           </div>
         )}
       </div>
@@ -452,6 +676,108 @@ export function ProductDetailView({
           </div>
         </section>
       )}
+
+      {/* WRITE A REVIEW DIALOG */}
+      <Dialog open={writeDialogOpen} onOpenChange={setWriteDialogOpen}>
+        <DialogContent className="sm:max-w-lg bg-white text-black">
+          <DialogHeader>
+            <DialogTitle>Write a Review</DialogTitle>
+            <DialogDescription>
+              Share your experience with {product.name}.
+            </DialogDescription>
+          </DialogHeader>
+
+          {!customer ? (
+            <div className="py-4 text-center space-y-4">
+              <p className="text-sm text-black/70">
+                Please sign in to your customer account to submit a verified product review.
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setWriteDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  render={<Link href={`/login?redirect=/products/${slug}`} />}
+                  nativeButton={false}
+                >
+                  Sign In to Review
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <form
+              noValidate
+              onSubmit={handleSubmit((values) => submitReviewMutation.mutate(values))}
+              className="space-y-4"
+            >
+              <div>
+                <Label>Your Rating *</Label>
+                <div className="mt-2 flex items-center gap-1.5">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      aria-label={`Rate ${star} out of 5`}
+                      onClick={() => setValue("rating", star, { shouldValidate: true })}
+                      className="rounded-md p-1 transition-transform hover:scale-110 cursor-pointer"
+                    >
+                      <Star
+                        className={cn(
+                          "h-7 w-7",
+                          star <= watchedRating
+                            ? "fill-[#FFC633] text-[#FFC633]"
+                            : "text-black/20",
+                        )}
+                      />
+                    </button>
+                  ))}
+                  <span className="ml-2 text-sm font-medium text-black/70">
+                    {watchedRating}/5
+                  </span>
+                </div>
+                {errors.rating && (
+                  <p role="alert" className="mt-1 text-xs font-medium text-red-600">
+                    {errors.rating.message}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="review-comment">Your Review *</Label>
+                <Textarea
+                  id="review-comment"
+                  rows={4}
+                  aria-invalid={Boolean(errors.comment)}
+                  placeholder="Tell other shoppers about the fit, quality, and comfort..."
+                  className="mt-1.5 bg-white text-black"
+                  {...register("comment")}
+                />
+                {errors.comment && (
+                  <p role="alert" className="mt-1 text-xs font-medium text-red-600">
+                    {errors.comment.message}
+                  </p>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setWriteDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={submitReviewMutation.isPending}>
+                  {submitReviewMutation.isPending ? "Submitting..." : "Submit Review"}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

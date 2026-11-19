@@ -11,7 +11,7 @@ import { useCustomerAuth } from "@/providers/CustomerAuthProvider";
 import { useCart } from "@/providers/CartProvider";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError } from "@/lib/apiClient";
+import { applyApiErrorsToForm, getApiErrorMessage } from "@/lib/formErrors";
 import type { z } from "zod";
 
 type LoginValues = z.infer<typeof loginSchema>;
@@ -27,6 +27,7 @@ function CustomerLoginInner() {
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<LoginValues>({ resolver: zodResolver(loginSchema) });
 
@@ -38,7 +39,12 @@ function CustomerLoginInner() {
       toast.success("Welcome back!");
       router.push(redirect);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Invalid credentials.");
+      const mapped = applyApiErrorsToForm(err, setError, ["email", "password"]);
+      const message = getApiErrorMessage(err, "Invalid email or password.");
+      if (!mapped) {
+        setError("password", { type: "server", message });
+      }
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -52,22 +58,44 @@ function CustomerLoginInner() {
           Access your persistent cart, saved orders, and faster checkout.
         </p>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4">
+        <form noValidate onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" placeholder="customer@shopco.local" {...register("email")} />
-            {errors.email && <p className="text-xs text-[#FF3333]">{errors.email.message}</p>}
+            <Input
+              id="email"
+              type="email"
+              aria-invalid={Boolean(errors.email)}
+              placeholder="customer@shopco.local"
+              {...register("email")}
+            />
+            {errors.email && (
+              <p role="alert" className="text-xs font-medium text-[#FF3333]">
+                {errors.email.message}
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label htmlFor="password">Password</Label>
-              <Link href="/forgot-password" className="text-xs text-black/60 underline hover:text-black">
+              <Link
+                href="/forgot-password"
+                className="text-xs text-black/60 underline hover:text-black"
+              >
                 Forgot password?
               </Link>
             </div>
-            <Input id="password" type="password" {...register("password")} />
-            {errors.password && <p className="text-xs text-[#FF3333]">{errors.password.message}</p>}
+            <Input
+              id="password"
+              type="password"
+              aria-invalid={Boolean(errors.password)}
+              {...register("password")}
+            />
+            {errors.password && (
+              <p role="alert" className="text-xs font-medium text-[#FF3333]">
+                {errors.password.message}
+              </p>
+            )}
           </div>
 
           <button

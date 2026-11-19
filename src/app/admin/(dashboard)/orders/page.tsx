@@ -10,13 +10,37 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { OrderStatusBadge, PaymentStatusBadge } from "@/components/shared/StatusBadge";
 import { formatDate, formatExactMoney } from "@/lib/utils";
 
+const ORDER_STATUS_OPTIONS: Record<string, string> = {
+  all: "All Statuses",
+  pending: "Pending",
+  paid: "Paid",
+  processing: "Processing",
+  shipped: "Shipped",
+  delivered: "Delivered",
+  cancelled: "Cancelled",
+};
+
 export default function AdminOrdersPage() {
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
   const debouncedSearch = useDebounce(search, 300);
 
@@ -25,7 +49,7 @@ export default function AdminOrdersPage() {
     queryFn: () =>
       adminApi.getOrders({
         search: debouncedSearch || undefined,
-        status: status || undefined,
+        status: status === "all" ? undefined : status,
         page,
         per_page: 15,
       }),
@@ -38,14 +62,14 @@ export default function AdminOrdersPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Orders</h1>
-        <p className="text-sm text-black/60 dark:text-zinc-400">
+        <p className="text-sm text-muted-foreground">
           Inspect verified payments, fulfill orders, and manage cancellations.
         </p>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[220px] max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-black/40" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => {
@@ -53,25 +77,28 @@ export default function AdminOrdersPage() {
               setPage(1);
             }}
             placeholder="Search order #, customer, email..."
-            className="pl-9"
+            className="pl-9 h-9"
           />
         </div>
-        <select
+        <Select
           value={status}
-          onChange={(e) => {
-            setStatus(e.target.value);
+          items={ORDER_STATUS_OPTIONS}
+          onValueChange={(value) => {
+            setStatus(value ?? "all");
             setPage(1);
           }}
-          className="h-10 rounded-lg border border-black/15 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-900"
         >
-          <option value="">All Statuses</option>
-          <option value="pending">Pending</option>
-          <option value="paid">Paid</option>
-          <option value="processing">Processing</option>
-          <option value="shipped">Shipped</option>
-          <option value="delivered">Delivered</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
+          <SelectTrigger aria-label="Filter orders by status" className="h-9 min-w-[168px]">
+            <SelectValue>{ORDER_STATUS_OPTIONS[status] ?? "All Statuses"}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(ORDER_STATUS_OPTIONS).map(([val, label]) => (
+              <SelectItem key={val} value={val}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <Card>
@@ -99,7 +126,7 @@ export default function AdminOrdersPage() {
               <TableBody>
                 {orders.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-10 text-center text-black/50">
+                    <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
                       No matching orders found.
                     </TableCell>
                   </TableRow>
@@ -109,9 +136,7 @@ export default function AdminOrdersPage() {
                       <TableCell className="font-semibold">{order.order_number}</TableCell>
                       <TableCell>
                         <div className="font-medium">{order.shipping.full_name}</div>
-                        <div className="text-xs text-black/55 dark:text-zinc-400">
-                          {order.shipping.email}
-                        </div>
+                        <div className="text-xs text-muted-foreground">{order.shipping.email}</div>
                       </TableCell>
                       <TableCell>{order.items_count ?? "—"}</TableCell>
                       <TableCell>
@@ -123,12 +148,18 @@ export default function AdminOrdersPage() {
                       <TableCell className="font-semibold">
                         {formatExactMoney(order.total_amount)}
                       </TableCell>
-                      <TableCell className="text-xs">{formatDate(order.created_at)}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {formatDate(order.created_at)}
+                      </TableCell>
                       <TableCell className="text-right">
-                        <Button asChild variant="ghost" size="icon">
-                          <Link href={`/admin/orders/${order.id}`} aria-label="View order">
-                            <Eye className="h-4 w-4" />
-                          </Link>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="View order"
+                          render={<Link href={`/admin/orders/${order.id}`} />}
+                          nativeButton={false}
+                        >
+                          <Eye className="h-4 w-4" />
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -142,10 +173,15 @@ export default function AdminOrdersPage() {
 
       {meta && meta.last_page > 1 && (
         <div className="flex items-center justify-between">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => p - 1)}
+          >
             Previous
           </Button>
-          <span className="text-xs text-black/60">
+          <span className="text-xs text-muted-foreground">
             Page {meta.current_page} of {meta.last_page}
           </span>
           <Button

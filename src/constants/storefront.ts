@@ -138,4 +138,14 @@ export const PRODUCT_FAQS = [
     answer:
       "Unworn items with original tags may be returned within 30 days. Orders cancelled before shipping are automatically refunded to your original payment method.",
   },
+  {
+    question: "How should I wash and care for this garment?",
+    answer:
+      "Machine wash cold inside-out with similar colors on a gentle cycle. Tumble dry low or hang dry to preserve fabric softness, shape, and graphic print vibrancy.",
+  },
+  {
+    question: "Are promo codes and online payments secure?",
+    answer:
+      "Yes. All promo codes are validated server-side, and card payments are processed through encrypted Stripe PaymentIntents with server-side webhook verification.",
+  },
 ] as const;

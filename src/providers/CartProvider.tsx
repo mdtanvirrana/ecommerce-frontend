@@ -21,7 +21,7 @@ interface CartContextValue {
   ) => Promise<boolean>;
   updateQuantity: (itemId: number, quantity: number) => Promise<void>;
   removeItem: (itemId: number) => Promise<void>;
-  applyCoupon: (code: string) => Promise<boolean>;
+  applyCoupon: (code: string) => Promise<{ ok: boolean; error?: string }>;
   removeCoupon: () => Promise<void>;
   clearLocalAfterCheckout: () => void;
 }
@@ -286,15 +286,17 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   );
 
   const applyCoupon = useCallback(
-    async (code: string): Promise<boolean> => {
-      if (!code.trim()) return false;
+    async (code: string): Promise<{ ok: boolean; error?: string }> => {
+      if (!code.trim()) {
+        return { ok: false, error: "Please enter a promo code." };
+      }
       setMutating(true);
       try {
         if (customer) {
           const res = await cartApi.applyCoupon(code.trim());
           setCart(res.data);
           toast.success(`Coupon ${code.toUpperCase()} applied.`);
-          return true;
+          return { ok: true };
         }
 
         // Validate via backend even for guest preview!
@@ -308,10 +310,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         setGuestCoupon(nextCoupon);
         setCart(buildGuestSummary(readGuestCart(), nextCoupon));
         toast.success(`Coupon ${res.data.code} applied.`);
-        return true;
+        return { ok: true };
       } catch (err) {
-        toast.error(err instanceof ApiError ? err.message : "Invalid coupon code.");
-        return false;
+        const message = err instanceof ApiError ? err.message : "Invalid coupon code.";
+        toast.error(message);
+        return { ok: false, error: message };
       } finally {
         setMutating(false);
       }

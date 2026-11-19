@@ -10,6 +10,15 @@ export default async function ProductDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const detail = await serverCatalog.getProductBySlug(slug);
-  return <ProductDetailView slug={slug} initialDetail={detail} />;
+  const [detail, initialReviews] = await Promise.all([
+    serverCatalog.getProductBySlug(slug),
+    serverCatalog.getProductReviews(slug, 6),
+  ]);
+  return (
+    <ProductDetailView
+      slug={slug}
+      initialDetail={detail}
+      initialReviews={initialReviews}
+    />
+  );
 }

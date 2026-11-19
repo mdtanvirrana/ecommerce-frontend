@@ -11,7 +11,7 @@ import { useCustomerAuth } from "@/providers/CustomerAuthProvider";
 import { Breadcrumb } from "@/components/storefront/Breadcrumb";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError } from "@/lib/apiClient";
+import { applyApiErrorsToForm, getApiErrorMessage } from "@/lib/formErrors";
 import type { z } from "zod";
 
 type ProfileValues = z.infer<typeof profileSchema>;
@@ -22,6 +22,7 @@ export default function CustomerAccountPage() {
     register,
     handleSubmit,
     reset,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<ProfileValues>({ resolver: zodResolver(profileSchema) });
 
@@ -41,7 +42,8 @@ export default function CustomerAccountPage() {
       await refreshCustomer();
       toast.success("Profile updated successfully.");
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to update profile.");
+      applyApiErrorsToForm(err, setError, ["name", "email", "phone"]);
+      toast.error(getApiErrorMessage(err, "Failed to update profile."));
     }
   };
 
@@ -53,20 +55,38 @@ export default function CustomerAccountPage() {
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
         <div className="rounded-[20px] border border-black/10 p-6 sm:p-8 lg:col-span-7">
           <h2 className="text-xl font-bold text-black">Profile Information</h2>
-          <form onSubmit={handleSubmit(onSubmit)} className="mt-5 space-y-4">
+          <form noValidate onSubmit={handleSubmit(onSubmit)} className="mt-5 space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="name">Full Name</Label>
-              <Input id="name" {...register("name")} />
-              {errors.name && <p className="text-xs text-[#FF3333]">{errors.name.message}</p>}
+              <Input id="name" aria-invalid={Boolean(errors.name)} {...register("name")} />
+              {errors.name && (
+                <p role="alert" className="text-xs font-medium text-[#FF3333]">
+                  {errors.name.message}
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" {...register("email")} />
-              {errors.email && <p className="text-xs text-[#FF3333]">{errors.email.message}</p>}
+              <Input
+                id="email"
+                type="email"
+                aria-invalid={Boolean(errors.email)}
+                {...register("email")}
+              />
+              {errors.email && (
+                <p role="alert" className="text-xs font-medium text-[#FF3333]">
+                  {errors.email.message}
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="phone">Phone</Label>
-              <Input id="phone" {...register("phone")} />
+              <Input id="phone" aria-invalid={Boolean(errors.phone)} {...register("phone")} />
+              {errors.phone && (
+                <p role="alert" className="text-xs font-medium text-[#FF3333]">
+                  {errors.phone.message}
+                </p>
+              )}
             </div>
             <button
               type="submit"

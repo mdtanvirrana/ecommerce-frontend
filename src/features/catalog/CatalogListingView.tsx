@@ -19,7 +19,15 @@ import { catalogApi } from "@/services/api";
 import { Breadcrumb } from "@/components/storefront/Breadcrumb";
 import { ProductCard } from "@/components/storefront/ProductCard";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { FILTER_COLORS, FILTER_SIZES } from "@/constants/storefront";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 import type { ApiResponse, Category, Product } from "@/types/api";
 
@@ -30,6 +38,13 @@ interface CatalogListingViewProps {
   initialCategory?: ApiResponse<Category> | null;
 }
 
+const SORT_OPTIONS: Record<string, string> = {
+  popular: "Most Popular",
+  newest: "Newest",
+  price_asc: "Price: Low to High",
+  price_desc: "Price: High to Low",
+};
+
 export function CatalogListingView({
   categorySlug,
   initialProducts,
@@ -38,6 +53,8 @@ export function CatalogListingView({
 }: CatalogListingViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isMobile = useMediaQuery("(max-width: 767px)", false);
+  const perPage = isMobile ? 6 : 9;
 
   const initialSearch = searchParams.get("search") ?? "";
   const initialMin = Number(searchParams.get("min_price") ?? 0);
@@ -52,6 +69,7 @@ export function CatalogListingView({
 
   const [draftMin, setDraftMin] = useState(initialMin);
   const [draftMax, setDraftMax] = useState(initialMax);
+  const [priceError, setPriceError] = useState<string | null>(null);
   const [draftColor, setDraftColor] = useState(initialColor);
   const [draftSize, setDraftSize] = useState(initialSize);
   const [draftSearch, setDraftSearch] = useState(initialSearch);
@@ -93,7 +111,7 @@ export function CatalogListingView({
       new_arrivals: newArrivals ? 1 : undefined,
       top_selling: topSelling ? 1 : undefined,
       page: initialPage,
-      per_page: 9,
+      per_page: perPage,
     }),
     [
       categorySlug,
@@ -107,10 +125,12 @@ export function CatalogListingView({
       newArrivals,
       topSelling,
       initialPage,
+      perPage,
     ],
   );
 
   const isDefaultView =
+    !isMobile &&
     !initialSearch &&
     initialMin === 0 &&
     initialMax === 400 &&
@@ -128,7 +148,7 @@ export function CatalogListingView({
     initialData: isDefaultView && initialProducts ? initialProducts : undefined,
   });
 
-  const products = productsRes?.data ?? [];
+  const products = (productsRes?.data ?? []).slice(0, perPage);
   const meta = productsRes?.meta;
 
   const pushQuery = (updates: Record<string, string | number | undefined>) => {
@@ -146,6 +166,15 @@ export function CatalogListingView({
   };
 
   const applyFilters = () => {
+    if (draftMin < 0 || draftMax < 0) {
+      setPriceError("Price values cannot be negative.");
+      return;
+    }
+    if (draftMin > draftMax) {
+      setPriceError("Minimum price cannot exceed maximum price.");
+      return;
+    }
+    setPriceError(null);
     pushQuery({
       search: draftSearch.trim() || undefined,
       min_price: draftMin > 0 ? draftMin : undefined,
@@ -160,6 +189,7 @@ export function CatalogListingView({
   const resetFilters = () => {
     setDraftMin(0);
     setDraftMax(400);
+    setPriceError(null);
     setDraftColor("");
     setDraftSize("");
     setDraftSearch("");
@@ -246,31 +276,47 @@ export function CatalogListingView({
                 <input
                   type="number"
                   min={0}
-                  max={draftMax}
+                  max={1000}
                   value={draftMin}
-                  onChange={(e) => setDraftMin(Math.max(0, Number(e.target.value)))}
-                  className="mt-1 h-9 w-full rounded-lg border border-black/15 px-2.5 text-sm"
+                  onChange={(e) => {
+                    const next = Number(e.target.value);
+                    setDraftMin(Number.isNaN(next) ? 0 : next);
+                    setPriceError(null);
+                  }}
+                  className="mt-1 h-9 w-full rounded-lg border border-black/15 px-2.5 text-sm text-black"
                 />
               </div>
               <div>
                 <label className="text-xs text-black/60">Max ($)</label>
                 <input
                   type="number"
-                  min={draftMin}
+                  min={0}
                   max={1000}
                   value={draftMax}
-                  onChange={(e) => setDraftMax(Math.max(draftMin, Number(e.target.value)))}
-                  className="mt-1 h-9 w-full rounded-lg border border-black/15 px-2.5 text-sm"
+                  onChange={(e) => {
+                    const next = Number(e.target.value);
+                    setDraftMax(Number.isNaN(next) ? 0 : next);
+                    setPriceError(null);
+                  }}
+                  className="mt-1 h-9 w-full rounded-lg border border-black/15 px-2.5 text-sm text-black"
                 />
               </div>
             </div>
+            {priceError && (
+              <p role="alert" className="text-xs font-medium text-red-600">
+                {priceError}
+              </p>
+            )}
             <input
               type="range"
               min={0}
               max={400}
               step={10}
-              value={draftMax}
-              onChange={(e) => setDraftMax(Math.max(draftMin, Number(e.target.value)))}
+              value={Math.min(400, Math.max(0, draftMax))}
+              onChange={(e) => {
+                setDraftMax(Math.max(draftMin, Number(e.target.value)));
+                setPriceError(null);
+              }}
               className="w-full accent-black cursor-pointer"
             />
             <div className="flex justify-between text-sm font-medium text-black">
@@ -433,7 +479,7 @@ export function CatalogListingView({
         <div className="flex-1 min-w-0">
           {/* Header Bar matching Category Page.jpg / .png */}
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-baseline gap-2.5">
+            <div className="flex flex-wrap items-baseline gap-2.5">
               <h1 className="text-2xl sm:text-[32px] font-bold text-black">{pageTitle}</h1>
               {meta && (
                 <span className="text-xs sm:text-base text-black/60 lg:hidden">
@@ -449,19 +495,29 @@ export function CatalogListingView({
                 </span>
               )}
 
-              <div className="hidden sm:flex items-center gap-1.5 text-base">
+              <div className="hidden sm:flex items-center gap-1.5 text-sm">
                 <span className="text-black/60">Sort by:</span>
-                <select
-                  aria-label="Sort products"
+                <Select
                   value={initialSort}
-                  onChange={(e) => pushQuery({ sort: e.target.value, page: 1 })}
-                  className="bg-transparent font-medium text-black focus:outline-none cursor-pointer"
+                  items={SORT_OPTIONS}
+                  onValueChange={(value) => {
+                    if (value) pushQuery({ sort: value, page: 1 });
+                  }}
                 >
-                  <option value="popular">Most Popular</option>
-                  <option value="newest">Newest</option>
-                  <option value="price_asc">Price: Low to High</option>
-                  <option value="price_desc">Price: High to Low</option>
-                </select>
+                  <SelectTrigger
+                    aria-label="Sort products"
+                    className="h-9 min-w-[168px] rounded-full border-black/15 bg-white font-medium text-black"
+                  >
+                    <SelectValue>{SORT_OPTIONS[initialSort] ?? "Most Popular"}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent align="end">
+                    {Object.entries(SORT_OPTIONS).map(([val, label]) => (
+                      <SelectItem key={val} value={val}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <button
@@ -475,27 +531,38 @@ export function CatalogListingView({
             </div>
           </div>
 
-          {/* Mobile Sort Row */}
+          {/* Mobile Sort Row using shadcn Select */}
           <div className="mt-3 flex items-center justify-between sm:hidden">
             <span className="text-xs text-black/60">Sort by:</span>
-            <select
-              aria-label="Sort products mobile"
+            <Select
               value={initialSort}
-              onChange={(e) => pushQuery({ sort: e.target.value, page: 1 })}
-              className="rounded-full bg-[#F0F0F0] px-3 py-1.5 text-xs font-medium text-black"
+              items={SORT_OPTIONS}
+              onValueChange={(value) => {
+                if (value) pushQuery({ sort: value, page: 1 });
+              }}
             >
-              <option value="popular">Most Popular</option>
-              <option value="newest">Newest</option>
-              <option value="price_asc">Price: Low to High</option>
-              <option value="price_desc">Price: High to Low</option>
-            </select>
+              <SelectTrigger
+                size="sm"
+                aria-label="Sort products mobile"
+                className="min-w-[160px] rounded-full border-transparent bg-[#F0F0F0] px-3 text-xs font-medium text-black"
+              >
+                <SelectValue>{SORT_OPTIONS[initialSort] ?? "Most Popular"}</SelectValue>
+              </SelectTrigger>
+              <SelectContent align="end">
+                {Object.entries(SORT_OPTIONS).map(([val, label]) => (
+                  <SelectItem key={val} value={val}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          {/* Product Grid */}
+          {/* Product Grid — 6 per page on mobile, 9 per page on desktop */}
           <div className="mt-5 sm:mt-6">
             {isLoading ? (
               <div className="grid grid-cols-2 gap-4 sm:gap-5 md:grid-cols-3">
-                {Array.from({ length: 6 }).map((_, i) => (
+                {Array.from({ length: perPage }).map((_, i) => (
                   <div key={i} className="space-y-3">
                     <Skeleton className="aspect-[295/298] w-full rounded-[20px]" />
                     <Skeleton className="h-5 w-3/4" />

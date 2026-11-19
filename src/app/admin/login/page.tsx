@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError } from "@/lib/apiClient";
+import { applyApiErrorsToForm, getApiErrorMessage } from "@/lib/formErrors";
 import type { z } from "zod";
 
 type LoginValues = z.infer<typeof loginSchema>;
@@ -28,6 +28,7 @@ function AdminLoginInner() {
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<LoginValues>({ resolver: zodResolver(loginSchema) });
 
@@ -38,7 +39,12 @@ function AdminLoginInner() {
       toast.success("Signed in to Admin Panel.");
       router.push(redirect);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Invalid staff credentials.");
+      const mapped = applyApiErrorsToForm(err, setError, ["email", "password"]);
+      const message = getApiErrorMessage(err, "Invalid staff credentials.");
+      if (!mapped) {
+        setError("password", { type: "server", message });
+      }
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -48,23 +54,28 @@ function AdminLoginInner() {
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 py-12 dark:bg-zinc-950">
       <Card className="w-full max-w-md rounded-2xl">
         <CardHeader className="space-y-2 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-black text-white">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
             <Shield className="h-6 w-6" />
           </div>
           <CardTitle className="font-display text-2xl">SHOP.CO ADMIN</CardTitle>
           <CardDescription>Sign in with your staff account (dedicated admin guard)</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <form noValidate onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="email">Staff Email</Label>
               <Input
                 id="email"
                 type="email"
+                aria-invalid={Boolean(errors.email)}
                 placeholder="superadmin@shopco.local"
                 {...register("email")}
               />
-              {errors.email && <p className="text-xs text-[#FF3333]">{errors.email.message}</p>}
+              {errors.email && (
+                <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                  {errors.email.message}
+                </p>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -72,14 +83,21 @@ function AdminLoginInner() {
                 <Label htmlFor="password">Password</Label>
                 <Link
                   href="/admin/forgot-password"
-                  className="text-xs text-black/60 underline hover:text-black"
+                  className="text-xs text-muted-foreground underline hover:text-foreground"
                 >
                   Forgot password?
                 </Link>
               </div>
-              <Input id="password" type="password" {...register("password")} />
+              <Input
+                id="password"
+                type="password"
+                aria-invalid={Boolean(errors.password)}
+                {...register("password")}
+              />
               {errors.password && (
-                <p className="text-xs text-[#FF3333]">{errors.password.message}</p>
+                <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                  {errors.password.message}
+                </p>
               )}
             </div>
 
@@ -88,8 +106,8 @@ function AdminLoginInner() {
             </Button>
           </form>
 
-          <div className="mt-6 border-t border-black/10 pt-4 text-center text-xs text-black/55">
-            <Link href="/" className="underline hover:text-black">
+          <div className="mt-6 border-t border-border pt-4 text-center text-xs text-muted-foreground">
+            <Link href="/" className="underline hover:text-foreground">
               ← Return to Customer Storefront
             </Link>
           </div>
@@ -101,7 +119,9 @@ function AdminLoginInner() {
 
 export default function AdminLoginPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+    <Suspense
+      fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}
+    >
       <AdminLoginInner />
     </Suspense>
   );

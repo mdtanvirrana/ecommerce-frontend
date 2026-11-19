@@ -9,7 +9,14 @@ import { adminApi } from "@/services/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { OrderStatusBadge, PaymentStatusBadge } from "@/components/shared/StatusBadge";
 import { formatDate, formatExactMoney } from "@/lib/utils";
 
@@ -38,14 +45,18 @@ export default function AdminCustomerDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Button asChild variant="outline" size="icon">
-          <Link href="/admin/customers">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="Back to customers"
+          render={<Link href="/admin/customers" />}
+          nativeButton={false}
+        >
+          <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
           <h1 className="text-2xl font-bold">{payload.customer.name}</h1>
-          <p className="text-sm text-black/60 dark:text-zinc-400">{payload.customer.email}</p>
+          <p className="text-sm text-muted-foreground">{payload.customer.email}</p>
         </div>
       </div>
 
@@ -72,7 +83,9 @@ export default function AdminCustomerDetailPage() {
           </CardHeader>
           <CardContent className="text-sm">
             <p className="font-medium">{payload.customer.phone || "No phone"}</p>
-            <p className="text-xs text-black/55">Joined {formatDate(payload.customer.created_at)}</p>
+            <p className="text-xs text-muted-foreground">
+              Joined {formatDate(payload.customer.created_at)}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -96,7 +109,7 @@ export default function AdminCustomerDetailPage() {
             <TableBody>
               {payload.orders.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-black/50">
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                     No orders placed by this customer yet.
                   </TableCell>
                 </TableRow>
@@ -115,7 +128,9 @@ export default function AdminCustomerDetailPage() {
                       <PaymentStatusBadge status={order.payment_status} />
                     </TableCell>
                     <TableCell>{order.items_count ?? "—"}</TableCell>
-                    <TableCell className="text-xs">{formatDate(order.created_at)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {formatDate(order.created_at)}
+                    </TableCell>
                     <TableCell className="text-right font-semibold">
                       {formatExactMoney(order.total_amount)}
                     </TableCell>

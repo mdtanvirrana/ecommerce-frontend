@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError } from "@/lib/apiClient";
+import { applyApiErrorsToForm, getApiErrorMessage } from "@/lib/formErrors";
 import type { z } from "zod";
 
 type ProfileValues = z.infer<typeof profileSchema>;
@@ -39,7 +39,8 @@ export default function AdminProfilePage() {
       await refreshStaff();
       toast.success("Staff profile updated.");
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to update profile.");
+      applyApiErrorsToForm(err, profileForm.setError, ["name", "email", "phone"]);
+      toast.error(getApiErrorMessage(err, "Failed to update profile."));
     }
   };
 
@@ -49,15 +50,20 @@ export default function AdminProfilePage() {
       passwordForm.reset();
       toast.success("Password changed successfully.");
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to update password.");
+      applyApiErrorsToForm(err, passwordForm.setError, [
+        "current_password",
+        "password",
+        "password_confirmation",
+      ]);
+      toast.error(getApiErrorMessage(err, "Failed to update password."));
     }
   };
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div>
+    <div className="mx-auto max-w-2xl space-y-6">
+      <div className="text-center">
         <h1 className="text-2xl font-bold">Staff Profile</h1>
-        <p className="text-sm text-black/60 dark:text-zinc-400">
+        <p className="mt-1 text-sm text-muted-foreground">
           Update your staff details and manage your password securely.
         </p>
       </div>
@@ -68,30 +74,52 @@ export default function AdminProfilePage() {
           <CardDescription>Name, email, and contact number</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={profileForm.handleSubmit(onUpdateProfile)} className="space-y-4">
+          <form
+            noValidate
+            onSubmit={profileForm.handleSubmit(onUpdateProfile)}
+            className="space-y-4"
+          >
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label>Full Name</Label>
-                <Input {...profileForm.register("name")} />
+                <Label htmlFor="staff-name">Full Name</Label>
+                <Input
+                  id="staff-name"
+                  aria-invalid={Boolean(profileForm.formState.errors.name)}
+                  {...profileForm.register("name")}
+                />
                 {profileForm.formState.errors.name && (
-                  <p className="text-xs text-[#FF3333]">
+                  <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
                     {profileForm.formState.errors.name.message}
                   </p>
                 )}
               </div>
               <div className="space-y-1.5">
-                <Label>Email</Label>
-                <Input type="email" {...profileForm.register("email")} />
+                <Label htmlFor="staff-email">Email</Label>
+                <Input
+                  id="staff-email"
+                  type="email"
+                  aria-invalid={Boolean(profileForm.formState.errors.email)}
+                  {...profileForm.register("email")}
+                />
                 {profileForm.formState.errors.email && (
-                  <p className="text-xs text-[#FF3333]">
+                  <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
                     {profileForm.formState.errors.email.message}
                   </p>
                 )}
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>Phone</Label>
-              <Input {...profileForm.register("phone")} />
+              <Label htmlFor="staff-phone">Phone</Label>
+              <Input
+                id="staff-phone"
+                aria-invalid={Boolean(profileForm.formState.errors.phone)}
+                {...profileForm.register("phone")}
+              />
+              {profileForm.formState.errors.phone && (
+                <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                  {profileForm.formState.errors.phone.message}
+                </p>
+              )}
             </div>
             <Button type="submit" disabled={profileForm.formState.isSubmitting}>
               {profileForm.formState.isSubmitting ? "Saving..." : "Save Profile"}
@@ -108,31 +136,50 @@ export default function AdminProfilePage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={passwordForm.handleSubmit(onUpdatePassword)} className="space-y-4">
+          <form
+            noValidate
+            onSubmit={passwordForm.handleSubmit(onUpdatePassword)}
+            className="space-y-4"
+          >
             <div className="space-y-1.5">
-              <Label>Current Password</Label>
-              <Input type="password" {...passwordForm.register("current_password")} />
+              <Label htmlFor="current-password">Current Password</Label>
+              <Input
+                id="current-password"
+                type="password"
+                aria-invalid={Boolean(passwordForm.formState.errors.current_password)}
+                {...passwordForm.register("current_password")}
+              />
               {passwordForm.formState.errors.current_password && (
-                <p className="text-xs text-[#FF3333]">
+                <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
                   {passwordForm.formState.errors.current_password.message}
                 </p>
               )}
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label>New Password</Label>
-                <Input type="password" {...passwordForm.register("password")} />
+                <Label htmlFor="new-password">New Password</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  aria-invalid={Boolean(passwordForm.formState.errors.password)}
+                  {...passwordForm.register("password")}
+                />
                 {passwordForm.formState.errors.password && (
-                  <p className="text-xs text-[#FF3333]">
+                  <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
                     {passwordForm.formState.errors.password.message}
                   </p>
                 )}
               </div>
               <div className="space-y-1.5">
-                <Label>Confirm New Password</Label>
-                <Input type="password" {...passwordForm.register("password_confirmation")} />
+                <Label htmlFor="confirm-password">Confirm New Password</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  aria-invalid={Boolean(passwordForm.formState.errors.password_confirmation)}
+                  {...passwordForm.register("password_confirmation")}
+                />
                 {passwordForm.formState.errors.password_confirmation && (
-                  <p className="text-xs text-[#FF3333]">
+                  <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
                     {passwordForm.formState.errors.password_confirmation.message}
                   </p>
                 )}

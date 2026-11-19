@@ -3,12 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import {
-  AlertTriangle,
-  DollarSign,
-  ShoppingBag,
-  Users,
-} from "lucide-react";
+import { AlertTriangle, DollarSign, ShoppingBag, Users } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -22,7 +17,14 @@ import { adminApi } from "@/services/api";
 import { useAdminAuth } from "@/providers/AdminAuthProvider";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { OrderStatusBadge, PaymentStatusBadge } from "@/components/shared/StatusBadge";
 import { formatDate, formatExactMoney } from "@/lib/utils";
 
@@ -40,7 +42,7 @@ export default function AdminDashboardPage() {
     return (
       <Card className="p-8 text-center">
         <h1 className="text-xl font-bold">Welcome to SHOP.CO Admin</h1>
-        <p className="mt-2 text-sm text-black/60 dark:text-zinc-400">
+        <p className="mt-2 text-sm text-muted-foreground">
           Use the navigation sidebar to access modules assigned to your role.
         </p>
       </Card>
@@ -62,7 +64,7 @@ export default function AdminDashboardPage() {
 
   if (isError || !data?.data) {
     return (
-      <Card className="p-8 text-center text-[#FF3333]">
+      <Card className="p-8 text-center text-red-600 dark:text-red-400">
         Failed to load dashboard analytics from the database.
       </Card>
     );
@@ -102,7 +104,7 @@ export default function AdminDashboardPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Dashboard Overview</h1>
-        <p className="text-sm text-black/60 dark:text-zinc-400">
+        <p className="text-sm text-muted-foreground">
           Live store performance computed directly from MySQL records.
         </p>
       </div>
@@ -117,15 +119,13 @@ export default function AdminDashboardPage() {
                 <CardDescription className="font-medium">{kpi.label}</CardDescription>
                 <Icon
                   className={
-                    kpi.warn
-                      ? "h-5 w-5 text-amber-500"
-                      : "h-5 w-5 text-black/50 dark:text-zinc-400"
+                    kpi.warn ? "h-5 w-5 text-amber-500" : "h-5 w-5 text-muted-foreground"
                   }
                 />
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-bold">{kpi.value}</p>
-                <p className="mt-1 text-xs text-black/55 dark:text-zinc-400">{kpi.sub}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{kpi.sub}</p>
               </CardContent>
             </Card>
           );
@@ -144,21 +144,37 @@ export default function AdminDashboardPage() {
               <AreaChart data={sales_chart} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#18181b" stopOpacity={0.35} />
-                    <stop offset="95%" stopColor="#18181b" stopOpacity={0.02} />
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={4} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+                <CartesianGrid strokeDasharray="3 3" stroke="currentColor" strokeOpacity={0.12} />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+                  interval={4}
+                />
+                <YAxis
+                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+                  tickFormatter={(v) => `$${v}`}
+                />
                 <Tooltip
+                  contentStyle={{
+                    backgroundColor: "var(--popover)",
+                    borderColor: "var(--border)",
+                    color: "var(--popover-foreground)",
+                    borderRadius: "10px",
+                    fontSize: "12px",
+                  }}
+                  itemStyle={{ color: "var(--popover-foreground)" }}
+                  labelStyle={{ color: "var(--muted-foreground)", fontWeight: 600 }}
                   formatter={(value) => [formatExactMoney(Number(value)), "Revenue"]}
                 />
                 <Area
                   type="monotone"
                   dataKey="revenue"
-                  stroke="#18181b"
-                  strokeWidth={2}
+                  stroke="#3b82f6"
+                  strokeWidth={2.2}
                   fill="url(#revGrad)"
                 />
               </AreaChart>
@@ -173,22 +189,22 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
             {low_stock_items.length === 0 ? (
-              <p className="py-8 text-center text-sm text-black/50 dark:text-zinc-400">
+              <p className="py-8 text-center text-sm text-muted-foreground">
                 All active products have healthy stock levels.
               </p>
             ) : (
-              <div className="divide-y divide-black/8 dark:divide-zinc-800">
+              <div className="divide-y divide-border">
                 {low_stock_items.map((item) => (
                   <div key={item.id} className="flex items-center justify-between py-3 text-sm">
                     <div className="min-w-0 pr-3">
                       <p className="truncate font-medium">{item.name}</p>
-                      <p className="text-xs text-black/55 dark:text-zinc-400">{item.sku}</p>
+                      <p className="text-xs text-muted-foreground">{item.sku}</p>
                     </div>
                     <span
                       className={
                         item.stock_quantity === 0
-                          ? "rounded-full bg-[#FF3333]/10 px-2.5 py-0.5 text-xs font-bold text-[#FF3333]"
-                          : "rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-bold text-amber-700 dark:text-amber-400"
+                          ? "rounded-full bg-red-500/15 px-2.5 py-0.5 text-xs font-bold text-red-700 dark:text-red-300"
+                          : "rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-bold text-amber-700 dark:text-amber-300"
                       }
                     >
                       {item.stock_quantity} left
@@ -209,7 +225,10 @@ export default function AdminDashboardPage() {
             <CardDescription>Latest customer orders across all statuses</CardDescription>
           </div>
           {hasPermission("orders.view") && (
-            <Link href="/admin/orders" className="text-xs font-medium underline">
+            <Link
+              href="/admin/orders"
+              className="text-xs font-medium text-foreground underline hover:opacity-80"
+            >
               View All Orders
             </Link>
           )}
@@ -229,7 +248,7 @@ export default function AdminDashboardPage() {
             <TableBody>
               {recent_orders.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-black/50">
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                     No orders recorded yet.
                   </TableCell>
                 </TableRow>
@@ -243,9 +262,7 @@ export default function AdminDashboardPage() {
                     </TableCell>
                     <TableCell>
                       <div className="font-medium">{order.shipping.full_name}</div>
-                      <div className="text-xs text-black/55 dark:text-zinc-400">
-                        {order.shipping.email}
-                      </div>
+                      <div className="text-xs text-muted-foreground">{order.shipping.email}</div>
                     </TableCell>
                     <TableCell>
                       <OrderStatusBadge status={order.status} />
@@ -253,7 +270,9 @@ export default function AdminDashboardPage() {
                     <TableCell>
                       <PaymentStatusBadge status={order.payment_status} />
                     </TableCell>
-                    <TableCell className="text-xs">{formatDate(order.created_at)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {formatDate(order.created_at)}
+                    </TableCell>
                     <TableCell className="text-right font-semibold">
                       {formatExactMoney(order.total_amount)}
                     </TableCell>

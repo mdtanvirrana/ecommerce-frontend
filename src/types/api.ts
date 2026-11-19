@@ -247,6 +247,36 @@ export interface CheckoutResponse {
   publishable_key: string;
 }
 
+export interface Review {
+  id: number;
+  product_id: number;
+  product?: {
+    id: number;
+    name: string;
+    slug: string;
+    sku: string;
+  } | null;
+  user_id: number | null;
+  reviewer_name: string;
+  rating: number;
+  comment: string;
+  is_verified_purchase: boolean;
+  is_approved: boolean;
+  is_featured: boolean;
+  created_at: string;
+}
+
+export interface AdminReviewsPayload {
+  reviews: Review[];
+  summary: {
+    total_reviews: number;
+    approved_reviews: number;
+    pending_reviews: number;
+    featured_reviews: number;
+    average_rating: string;
+  };
+}
+
 export interface DashboardData {
   stats: {
     today_orders: number;

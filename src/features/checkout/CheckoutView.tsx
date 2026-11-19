@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/apiClient";
+import { applyApiErrorsToForm } from "@/lib/formErrors";
 import { formatExactMoney } from "@/lib/utils";
 import type { CheckoutResponse } from "@/types/api";
 import type { z } from "zod";
@@ -115,6 +116,7 @@ export function CheckoutView() {
     register,
     handleSubmit,
     setValue,
+    setError,
     formState: { errors },
   } = useForm<CheckoutValues>({
     resolver: zodResolver(checkoutSchema),
@@ -157,6 +159,7 @@ export function CheckoutView() {
       setCheckoutSession(res.data);
       toast.success("Shipping validated. Complete Stripe payment below.");
     } catch (err) {
+      applyApiErrorsToForm(err, setError);
       toast.error(err instanceof ApiError ? err.message : "Could not initialize checkout.");
     } finally {
       setInitializing(false);
@@ -222,32 +225,32 @@ export function CheckoutView() {
         {/* Left: Shipping Form OR Stripe Payment Step */}
         <div className="rounded-[20px] border border-black/10 p-6 sm:p-8 lg:col-span-7">
           {!checkoutSession ? (
-            <form onSubmit={handleSubmit(onSubmitShipping)} className="space-y-5">
+            <form noValidate onSubmit={handleSubmit(onSubmitShipping)} className="space-y-5">
               <h2 className="text-xl font-bold text-black">1. Shipping Information</h2>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="shipping_full_name">Full Name</Label>
-                  <Input id="shipping_full_name" {...register("shipping_full_name")} />
+                  <Input id="shipping_full_name" aria-invalid={Boolean(errors.shipping_full_name)} {...register("shipping_full_name")} />
                   {errors.shipping_full_name && (
-                    <p className="text-xs text-[#FF3333]">{errors.shipping_full_name.message}</p>
+                    <p role="alert" className="text-xs font-medium text-[#FF3333]">{errors.shipping_full_name.message}</p>
                   )}
                 </div>
 
                 <div className="space-y-1.5">
                   <Label htmlFor="shipping_email">Email</Label>
-                  <Input id="shipping_email" type="email" {...register("shipping_email")} />
+                  <Input id="shipping_email" type="email" aria-invalid={Boolean(errors.shipping_email)} {...register("shipping_email")} />
                   {errors.shipping_email && (
-                    <p className="text-xs text-[#FF3333]">{errors.shipping_email.message}</p>
+                    <p role="alert" className="text-xs font-medium text-[#FF3333]">{errors.shipping_email.message}</p>
                   )}
                 </div>
               </div>
 
               <div className="space-y-1.5">
                 <Label htmlFor="shipping_phone">Phone Number</Label>
-                <Input id="shipping_phone" {...register("shipping_phone")} placeholder="+1 555 0100" />
+                <Input id="shipping_phone" aria-invalid={Boolean(errors.shipping_phone)} {...register("shipping_phone")} placeholder="+1 555 0100" />
                 {errors.shipping_phone && (
-                  <p className="text-xs text-[#FF3333]">{errors.shipping_phone.message}</p>
+                  <p role="alert" className="text-xs font-medium text-[#FF3333]">{errors.shipping_phone.message}</p>
                 )}
               </div>
 
@@ -255,28 +258,29 @@ export function CheckoutView() {
                 <Label htmlFor="shipping_address">Shipping Address</Label>
                 <Input
                   id="shipping_address"
+                  aria-invalid={Boolean(errors.shipping_address)}
                   {...register("shipping_address")}
                   placeholder="Street address, apartment, suite"
                 />
                 {errors.shipping_address && (
-                  <p className="text-xs text-[#FF3333]">{errors.shipping_address.message}</p>
+                  <p role="alert" className="text-xs font-medium text-[#FF3333]">{errors.shipping_address.message}</p>
                 )}
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="shipping_city">City</Label>
-                  <Input id="shipping_city" {...register("shipping_city")} />
+                  <Input id="shipping_city" aria-invalid={Boolean(errors.shipping_city)} {...register("shipping_city")} />
                   {errors.shipping_city && (
-                    <p className="text-xs text-[#FF3333]">{errors.shipping_city.message}</p>
+                    <p role="alert" className="text-xs font-medium text-[#FF3333]">{errors.shipping_city.message}</p>
                   )}
                 </div>
 
                 <div className="space-y-1.5">
                   <Label htmlFor="shipping_postal_code">Postal Code</Label>
-                  <Input id="shipping_postal_code" {...register("shipping_postal_code")} />
+                  <Input id="shipping_postal_code" aria-invalid={Boolean(errors.shipping_postal_code)} {...register("shipping_postal_code")} />
                   {errors.shipping_postal_code && (
-                    <p className="text-xs text-[#FF3333]">{errors.shipping_postal_code.message}</p>
+                    <p role="alert" className="text-xs font-medium text-[#FF3333]">{errors.shipping_postal_code.message}</p>
                   )}
                 </div>
               </div>
@@ -285,9 +289,13 @@ export function CheckoutView() {
                 <Label htmlFor="delivery_instructions">Delivery Instructions (Optional)</Label>
                 <Textarea
                   id="delivery_instructions"
+                  aria-invalid={Boolean(errors.delivery_instructions)}
                   {...register("delivery_instructions")}
                   placeholder="Gate code, reception drop-off, etc."
                 />
+                {errors.delivery_instructions && (
+                  <p role="alert" className="text-xs font-medium text-[#FF3333]">{errors.delivery_instructions.message}</p>
+                )}
               </div>
 
               <button

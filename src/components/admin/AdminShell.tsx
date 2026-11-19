@@ -14,6 +14,7 @@ import {
   Package,
   ShieldCheck,
   ShoppingBag,
+  Star,
   Sun,
   Tag,
   UserCog,
@@ -38,6 +39,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Products", href: "/admin/products", icon: Package, permissions: ["products.view"] },
   { label: "Categories", href: "/admin/categories", icon: FolderTree, permissions: ["categories.view"] },
   { label: "Orders", href: "/admin/orders", icon: ShoppingBag, permissions: ["orders.view"] },
+  { label: "Reviews & Ratings", href: "/admin/reviews", icon: Star, permissions: ["reviews.view"] },
   { label: "Coupons", href: "/admin/coupons", icon: Tag, permissions: ["coupons.view", "coupons.manage"] },
   { label: "Customers", href: "/admin/customers", icon: Users, permissions: ["customers.view"] },
   { label: "Staff", href: "/admin/staff", icon: UsersRound, permissions: ["staff.view"] },
@@ -51,7 +53,14 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const { staff, loading, logout, hasAnyPermission } = useAdminAuth();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem("shopco_admin_dark") === "1";
+    } catch {
+      return false;
+    }
+  });
 
   useEffect(() => {
     if (!loading && !staff) {
@@ -66,13 +75,18 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     } else {
       root.classList.remove("dark");
     }
+    try {
+      window.localStorage.setItem("shopco_admin_dark", darkMode ? "1" : "0");
+    } catch {
+      // Ignore storage errors
+    }
     return () => root.classList.remove("dark");
   }, [darkMode]);
 
   if (loading || !staff) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-zinc-950">
-        <p className="text-sm text-zinc-500">Verifying staff session...</p>
+        <p className="text-sm text-muted-foreground">Verifying staff session...</p>
       </div>
     );
   }
@@ -91,15 +105,22 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   };
 
   const sidebarContent = (
-    <div className="flex h-full flex-col bg-white dark:bg-zinc-900 border-r border-black/10 dark:border-zinc-800">
-      <div className="flex h-16 items-center justify-between border-b border-black/10 dark:border-zinc-800 px-5">
-        <Link href="/admin" className="font-display text-xl tracking-tight text-black dark:text-white">
-          SHOP.CO <span className="font-sans text-xs font-semibold text-black/50 dark:text-zinc-400">ADMIN</span>
+    <div className="flex h-full flex-col bg-white text-zinc-950 dark:bg-zinc-900 dark:text-zinc-100 border-r border-zinc-200 dark:border-zinc-800">
+      <div className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-200 dark:border-zinc-800 px-5">
+        <Link
+          href="/admin"
+          className="font-display text-xl tracking-tight text-zinc-950 dark:text-white"
+        >
+          SHOP.CO{" "}
+          <span className="font-sans text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+            ADMIN
+          </span>
         </Link>
         <button
           type="button"
           onClick={() => setSidebarOpen(false)}
-          className="lg:hidden p-1 text-black/60 dark:text-zinc-400 cursor-pointer"
+          aria-label="Close sidebar"
+          className="lg:hidden rounded-lg p-1.5 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white cursor-pointer"
         >
           <X className="h-5 w-5" />
         </button>
@@ -120,8 +141,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               className={cn(
                 "flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors",
                 active
-                  ? "bg-black text-white dark:bg-white dark:text-black"
-                  : "text-black/70 hover:bg-black/5 hover:text-black dark:text-zinc-300 dark:hover:bg-zinc-800",
+                  ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
+                  : "text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white",
               )}
             >
               <Icon className="h-4 w-4 shrink-0" />
@@ -131,13 +152,19 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         })}
       </nav>
 
-      <div className="border-t border-black/10 dark:border-zinc-800 p-4 space-y-3">
-        <div className="rounded-xl bg-zinc-50 dark:bg-zinc-800/60 p-3">
-          <p className="truncate text-sm font-semibold text-black dark:text-white">{staff.name}</p>
-          <p className="truncate text-xs text-black/55 dark:text-zinc-400">{staff.email}</p>
+      <div className="shrink-0 border-t border-zinc-200 dark:border-zinc-800 p-4 space-y-3">
+        <div className="rounded-xl bg-zinc-100/80 dark:bg-zinc-800/80 p-3">
+          <p className="truncate text-sm font-semibold text-zinc-950 dark:text-white">
+            {staff.name}
+          </p>
+          <p className="truncate text-xs text-zinc-600 dark:text-zinc-400">{staff.email}</p>
           <div className="mt-2 flex flex-wrap gap-1">
             {(staff.roles ?? []).map((r) => (
-              <Badge key={r.id} variant={r.is_super_admin ? "default" : "secondary"} className="text-[10px]">
+              <Badge
+                key={r.id}
+                variant={r.is_super_admin ? "default" : "secondary"}
+                className="text-[10px]"
+              >
                 {r.name}
               </Badge>
             ))}
@@ -146,7 +173,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <button
           type="button"
           onClick={handleLogout}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-black/10 dark:border-zinc-700 py-2 text-xs font-medium text-[#FF3333] hover:bg-[#FF3333]/10 cursor-pointer"
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 dark:border-zinc-700 py-2 text-xs font-medium text-red-600 dark:text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-700 dark:hover:bg-red-500/20 dark:hover:text-red-300 cursor-pointer"
         >
           <LogOut className="h-3.5 w-3.5" /> Sign Out
         </button>
@@ -155,73 +182,82 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="flex min-h-screen bg-zinc-50 text-black dark:bg-zinc-950 dark:text-zinc-100">
-      {/* Desktop Sidebar */}
-      <aside className="hidden lg:block w-64 shrink-0 sticky top-0 h-screen">
+    <div className="min-h-screen bg-zinc-50 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-100">
+      {/* Fixed Desktop Sidebar */}
+      <aside className="fixed inset-y-0 left-0 z-40 hidden lg:block w-64">
         {sidebarContent}
       </aside>
 
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 flex lg:hidden">
-          <div className="w-64">{sidebarContent}</div>
-          <div className="flex-1 bg-black/50" onClick={() => setSidebarOpen(false)} />
+          <div className="w-64 h-full">{sidebarContent}</div>
+          <div
+            className="flex-1 bg-black/60 backdrop-blur-[1px]"
+            onClick={() => setSidebarOpen(false)}
+          />
         </div>
       )}
 
-      {/* Main Content */}
-      <div className="flex flex-1 flex-col min-w-0">
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b border-black/10 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/95 backdrop-blur px-4 lg:px-8">
-          <div className="flex items-center gap-3 min-w-0">
-            <button
-              type="button"
-              onClick={() => setSidebarOpen(true)}
-              aria-label="Open navigation"
-              className="lg:hidden rounded-lg p-1.5 hover:bg-black/5 dark:hover:bg-zinc-800 cursor-pointer"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
+      {/* Fixed Top Header */}
+      <header className="fixed top-0 left-0 lg:left-64 right-0 z-30 flex h-16 items-center justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/95 backdrop-blur px-4 lg:px-8">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Open navigation"
+            className="lg:hidden rounded-lg p-1.5 text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-white cursor-pointer"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
 
-            {/* Breadcrumbs */}
-            <nav aria-label="Admin breadcrumbs" className="flex items-center gap-1.5 text-sm truncate">
-              {segments.map((seg, i) => (
-                <React.Fragment key={`${seg}-${i}`}>
-                  {i > 0 && <ChevronRight className="h-3.5 w-3.5 text-black/40 dark:text-zinc-500" />}
-                  <span
-                    className={cn(
-                      "capitalize",
-                      i === segments.length - 1
-                        ? "font-semibold text-black dark:text-white"
-                        : "text-black/55 dark:text-zinc-400",
-                    )}
-                  >
-                    {seg}
-                  </span>
-                </React.Fragment>
-              ))}
-            </nav>
-          </div>
+          {/* Breadcrumbs */}
+          <nav
+            aria-label="Admin breadcrumbs"
+            className="flex items-center gap-1.5 text-sm truncate"
+          >
+            {segments.map((seg, i) => (
+              <React.Fragment key={`${seg}-${i}`}>
+                {i > 0 && (
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-400 dark:text-zinc-500" />
+                )}
+                <span
+                  className={cn(
+                    "capitalize",
+                    i === segments.length - 1
+                      ? "font-semibold text-zinc-950 dark:text-white"
+                      : "text-zinc-500 dark:text-zinc-400",
+                  )}
+                >
+                  {seg}
+                </span>
+              </React.Fragment>
+            ))}
+          </nav>
+        </div>
 
-          <div className="flex items-center gap-2 sm:gap-3">
-            <Link
-              href="/"
-              target="_blank"
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-black/15 dark:border-zinc-700 px-3.5 py-1.5 text-xs font-medium hover:bg-black/5 dark:hover:bg-zinc-800"
-            >
-              View Storefront <ExternalLink className="h-3.5 w-3.5" />
-            </Link>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Link
+            href="/"
+            target="_blank"
+            className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-zinc-200 dark:border-zinc-700 px-3.5 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-200 transition-colors hover:bg-zinc-100 hover:text-zinc-950 dark:hover:bg-zinc-800 dark:hover:text-white"
+          >
+            View Storefront <ExternalLink className="h-3.5 w-3.5" />
+          </Link>
 
-            <button
-              type="button"
-              onClick={() => setDarkMode((d) => !d)}
-              aria-label="Toggle dark mode"
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-black/15 dark:border-zinc-700 hover:bg-black/5 dark:hover:bg-zinc-800 cursor-pointer"
-            >
-              {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </button>
-          </div>
-        </header>
+          <button
+            type="button"
+            onClick={() => setDarkMode((d) => !d)}
+            aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 transition-colors hover:bg-zinc-100 hover:text-zinc-950 dark:hover:bg-zinc-800 dark:hover:text-white cursor-pointer"
+          >
+            {darkMode ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4" />}
+          </button>
+        </div>
+      </header>
 
+      {/* Scrollable Main Content Offset by Fixed Sidebar & Fixed Header */}
+      <div className="flex min-h-screen flex-col lg:pl-64 pt-16">
         <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
     </div>
