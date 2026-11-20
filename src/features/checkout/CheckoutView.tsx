@@ -49,6 +49,20 @@ function StripePaymentForm({
     setSubmitting(true);
     setErrorMessage(null);
 
+    // Re-verify live stock with DB row locks immediately before charging Stripe so oversells are rejected cleanly.
+    try {
+      await checkoutApi.validateStock(orderId);
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : "Inventory changed before payment. Please review your cart and try again.";
+      setErrorMessage(msg);
+      toast.error(msg);
+      setSubmitting(false);
+      return;
+    }
+
     const { error, paymentIntent } = await stripe.confirmPayment({
       elements,
       redirect: "if_required",
@@ -63,13 +77,22 @@ function StripePaymentForm({
     // NEVER trust client-side success alone — ask Laravel to verify directly with Stripe server API.
     if (paymentIntent) {
       try {
-        await checkoutApi.confirmPayment(orderId);
+        const res = await checkoutApi.confirmPayment(orderId);
+        if (res.data.status === "cancelled") {
+          const reason =
+            res.data.cancellation_reason ||
+            "Order could not be fulfilled because stock ran out. Any charge has been automatically refunded.";
+          setErrorMessage(reason);
+          toast.error(reason);
+          onVerified();
+          return;
+        }
       } catch {
         // Even if webhook is still processing, redirect to order detail which shows real status.
       }
     }
 
-    toast.success(`Payment submitted for ${orderNumber}. Verifying with server...`);
+    toast.success(`Payment verified for ${orderNumber}!`);
     onVerified();
   };
 
@@ -119,6 +142,7 @@ export function CheckoutView() {
 
   const [checkoutSession, setCheckoutSession] = useState<CheckoutResponse | null>(null);
   const [initializing, setInitializing] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const couponForm = useForm<CouponValues>({
     resolver: zodResolver(couponApplySchema),
@@ -173,6 +197,7 @@ export function CheckoutView() {
 
   const onSubmitShipping = async (values: CheckoutValues) => {
     setInitializing(true);
+    setCheckoutError(null);
     try {
       const res = await checkoutApi.checkout({
         ...values,
@@ -182,7 +207,12 @@ export function CheckoutView() {
       toast.success("Shipping validated. Complete Stripe payment below.");
     } catch (err) {
       applyApiErrorsToForm(err, setError);
-      toast.error(err instanceof ApiError ? err.message : "Could not initialize checkout.");
+      const msg = err instanceof ApiError ? err.message : "Could not initialize checkout.";
+      setCheckoutError(msg);
+      toast.error(msg);
+      if (err instanceof ApiError && err.status === 409) {
+        await refreshCart();
+      }
     } finally {
       setInitializing(false);
     }
@@ -319,6 +349,15 @@ export function CheckoutView() {
                   <p role="alert" className="text-xs font-medium text-[#FF3333]">{errors.delivery_instructions.message}</p>
                 )}
               </div>
+
+              {checkoutError && (
+                <div
+                  role="alert"
+                  className="rounded-xl border border-[#FF3333]/30 bg-[#FF3333]/10 p-3.5 text-sm font-medium text-[#FF3333]"
+                >
+                  {checkoutError}
+                </div>
+              )}
 
               <button
                 type="submit"

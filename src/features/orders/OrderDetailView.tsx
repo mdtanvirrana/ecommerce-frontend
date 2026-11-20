@@ -29,20 +29,45 @@ function RetryStripeForm({
   const stripe = useStripe();
   const elements = useElements();
   const [busy, setBusy] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!stripe || !elements) return;
     setBusy(true);
+    setRetryError(null);
+
+    try {
+      await checkoutApi.validateStock(orderId);
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : "Insufficient stock to complete payment for this order.";
+      setRetryError(msg);
+      toast.error(msg);
+      setBusy(false);
+      return;
+    }
+
     const { error } = await stripe.confirmPayment({ elements, redirect: "if_required" });
     if (error) {
-      toast.error(error.message || "Payment failed.");
+      const msg = error.message || "Payment failed.";
+      setRetryError(msg);
+      toast.error(msg);
       setBusy(false);
       return;
     }
     try {
-      await checkoutApi.confirmPayment(orderId);
-      toast.success("Payment verified!");
+      const res = await checkoutApi.confirmPayment(orderId);
+      if (res.data.status === "cancelled") {
+        toast.error(
+          res.data.cancellation_reason ||
+            "Order rejected due to insufficient stock. Your payment was automatically refunded.",
+        );
+      } else {
+        toast.success("Payment verified!");
+      }
     } catch {
       toast.info("Payment submitted — awaiting webhook confirmation.");
     }
@@ -53,6 +78,14 @@ function RetryStripeForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <PaymentElement />
+      {retryError && (
+        <div
+          role="alert"
+          className="rounded-xl border border-[#FF3333]/30 bg-[#FF3333]/10 p-3 text-sm font-medium text-[#FF3333]"
+        >
+          {retryError}
+        </div>
+      )}
       <button
         type="submit"
         disabled={!stripe || busy}

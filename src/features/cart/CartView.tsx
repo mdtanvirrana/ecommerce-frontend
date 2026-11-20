@@ -115,7 +115,9 @@ export function CartView() {
                         )}
                         {!item.is_available && (
                           <p className="mt-1 text-xs font-medium text-[#FF3333]">
-                            Only {item.stock_quantity} left in stock
+                            {item.stock_quantity <= 0
+                              ? "Out of stock — remove to proceed"
+                              : `Only ${item.stock_quantity} left in stock`}
                           </p>
                         )}
                       </div>

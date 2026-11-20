@@ -161,6 +161,12 @@ export const checkoutApi = {
     coupon_code?: string;
   }) => apiRequest<CheckoutResponse>("checkout", { method: "POST", body: payload }),
 
+  validateStock: (orderId: number) =>
+    apiRequest<{ order_id: number; stock_available: boolean }>(
+      `orders/${orderId}/validate-stock`,
+      { method: "POST" },
+    ),
+
   retryPayment: (orderId: number) =>
     apiRequest<CheckoutResponse>(`orders/${orderId}/retry-payment`, {
       method: "POST",
