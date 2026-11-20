@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { adminAuthApi } from "@/services/api";
 import type { Staff } from "@/types/api";
 
@@ -27,32 +27,47 @@ const AdminAuthContext = createContext<AdminAuthContextValue | null>(null);
 export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   const [staff, setStaff] = useState<Staff | null>(null);
   const [loading, setLoading] = useState(true);
+  const authVersionRef = useRef(0);
 
   const refreshStaff = useCallback(async (): Promise<Staff | null> => {
+    const reqVersion = ++authVersionRef.current;
     try {
       const res = await adminAuthApi.me();
-      setStaff(res.data);
+      if (authVersionRef.current === reqVersion) {
+        setStaff(res.data);
+      }
       return res.data;
     } catch {
-      setStaff(null);
+      if (authVersionRef.current === reqVersion) {
+        setStaff(null);
+      }
       return null;
     } finally {
-      setLoading(false);
+      if (authVersionRef.current === reqVersion) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     let active = true;
+    const reqVersion = authVersionRef.current;
     adminAuthApi
       .me()
       .then((res) => {
-        if (active) setStaff(res.data);
+        if (active && authVersionRef.current === reqVersion) {
+          setStaff(res.data);
+        }
       })
       .catch(() => {
-        if (active) setStaff(null);
+        if (active && authVersionRef.current === reqVersion) {
+          setStaff(null);
+        }
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active && authVersionRef.current === reqVersion) {
+          setLoading(false);
+        }
       });
     return () => {
       active = false;
@@ -71,7 +86,9 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
       if (!res.data.staff) {
         throw new Error("Invalid staff authentication response.");
       }
+      authVersionRef.current += 1;
       setStaff(res.data.staff);
+      setLoading(false);
       return { requiresTwoFactor: false, staff: res.data.staff };
     },
     [],
@@ -86,7 +103,9 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
         two_factor_token: twoFactorToken,
         code,
       });
+      authVersionRef.current += 1;
       setStaff(res.data.staff);
+      setLoading(false);
       return {
         staff: res.data.staff,
         usedRecoveryCode: Boolean(res.data.used_recovery_code),
@@ -96,6 +115,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(async () => {
+    authVersionRef.current += 1;
     await adminAuthApi.logout();
     setStaff(null);
   }, []);

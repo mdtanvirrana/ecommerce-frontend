@@ -101,7 +101,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const handleLogout = async () => {
     await logout();
     toast.success("Signed out of Admin Panel.");
-    router.push("/admin/login");
+    window.location.assign("/admin/login");
   };
 
   const sidebarContent = (

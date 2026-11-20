@@ -2,7 +2,7 @@
 
 import React, { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -17,9 +17,10 @@ import type { z } from "zod";
 type RegisterValues = z.infer<typeof registerSchema>;
 
 function CustomerRegisterInner() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect") || "/account";
+  const rawRedirect = searchParams.get("redirect") || "/account";
+  const redirect =
+    rawRedirect.startsWith("/") && !rawRedirect.startsWith("//") ? rawRedirect : "/account";
   const { register: registerCustomer } = useCustomerAuth();
   const { refreshCart } = useCart();
   const [submitting, setSubmitting] = useState(false);
@@ -37,8 +38,7 @@ function CustomerRegisterInner() {
       await registerCustomer(values);
       await refreshCart();
       toast.success("Account created! Welcome to SHOP.CO.");
-      router.replace(redirect);
-      router.refresh();
+      window.location.assign(redirect);
     } catch (err) {
       applyApiErrorsToForm(err, setError, [
         "name",

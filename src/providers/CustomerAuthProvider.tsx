@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { cartApi, customerAuthApi } from "@/services/api";
 import { clearGuestCart, readGuestCart } from "@/lib/guestCart";
 import type { Customer } from "@/types/api";
@@ -25,32 +25,47 @@ const CustomerAuthContext = createContext<CustomerAuthContextValue | null>(null)
 export function CustomerAuthProvider({ children }: { children: React.ReactNode }) {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
+  const authVersionRef = useRef(0);
 
   const refreshCustomer = useCallback(async (): Promise<Customer | null> => {
+    const reqVersion = ++authVersionRef.current;
     try {
       const res = await customerAuthApi.me();
-      setCustomer(res.data);
+      if (authVersionRef.current === reqVersion) {
+        setCustomer(res.data);
+      }
       return res.data;
     } catch {
-      setCustomer(null);
+      if (authVersionRef.current === reqVersion) {
+        setCustomer(null);
+      }
       return null;
     } finally {
-      setLoading(false);
+      if (authVersionRef.current === reqVersion) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     let active = true;
+    const reqVersion = authVersionRef.current;
     customerAuthApi
       .me()
       .then((res) => {
-        if (active) setCustomer(res.data);
+        if (active && authVersionRef.current === reqVersion) {
+          setCustomer(res.data);
+        }
       })
       .catch(() => {
-        if (active) setCustomer(null);
+        if (active && authVersionRef.current === reqVersion) {
+          setCustomer(null);
+        }
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active && authVersionRef.current === reqVersion) {
+          setLoading(false);
+        }
       });
     return () => {
       active = false;
@@ -78,7 +93,9 @@ export function CustomerAuthProvider({ children }: { children: React.ReactNode }
   const login = useCallback(
     async (email: string, password: string): Promise<Customer> => {
       const res = await customerAuthApi.login({ email, password });
+      authVersionRef.current += 1;
       setCustomer(res.data.user);
+      setLoading(false);
       await mergePendingGuestCart();
       return res.data.user;
     },
@@ -94,7 +111,9 @@ export function CustomerAuthProvider({ children }: { children: React.ReactNode }
       password_confirmation: string;
     }): Promise<Customer> => {
       const res = await customerAuthApi.register(payload);
+      authVersionRef.current += 1;
       setCustomer(res.data.user);
+      setLoading(false);
       await mergePendingGuestCart();
       return res.data.user;
     },
@@ -102,6 +121,7 @@ export function CustomerAuthProvider({ children }: { children: React.ReactNode }
   );
 
   const logout = useCallback(async () => {
+    authVersionRef.current += 1;
     await customerAuthApi.logout();
     setCustomer(null);
   }, []);

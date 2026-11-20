@@ -2,7 +2,7 @@
 
 import React, { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { KeyRound, Shield } from "lucide-react";
@@ -20,9 +20,10 @@ type LoginValues = z.infer<typeof loginSchema>;
 type TwoFactorValues = z.infer<typeof twoFactorCodeSchema>;
 
 function AdminLoginInner() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect") || "/admin";
+  const rawRedirect = searchParams.get("redirect") || "/admin";
+  const redirect =
+    rawRedirect.startsWith("/") && !rawRedirect.startsWith("//") ? rawRedirect : "/admin";
   const { login, completeTwoFactor } = useAdminAuth();
   const [submitting, setSubmitting] = useState(false);
   const [twoFactorToken, setTwoFactorToken] = useState<string | null>(null);
@@ -50,7 +51,7 @@ function AdminLoginInner() {
         return;
       }
       toast.success("Signed in to Admin Panel.");
-      router.push(redirect);
+      window.location.assign(redirect);
     } catch (err) {
       const mapped = applyApiErrorsToForm(err, setError, ["email", "password"]);
       const message = getApiErrorMessage(err, "Invalid staff credentials.");
@@ -73,7 +74,7 @@ function AdminLoginInner() {
           ? "Signed in with a recovery code. Consider regenerating your recovery codes."
           : "Two-factor verification successful.",
       );
-      router.push(redirect);
+      window.location.assign(redirect);
     } catch (err) {
       const mapped = applyApiErrorsToForm(err, twoFactorForm.setError, ["code"]);
       const message = getApiErrorMessage(err, "Invalid authentication code.");

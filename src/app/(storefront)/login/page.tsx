@@ -2,7 +2,7 @@
 
 import React, { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -17,9 +17,10 @@ import type { z } from "zod";
 type LoginValues = z.infer<typeof loginSchema>;
 
 function CustomerLoginInner() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect") || "/account";
+  const rawRedirect = searchParams.get("redirect") || "/account";
+  const redirect =
+    rawRedirect.startsWith("/") && !rawRedirect.startsWith("//") ? rawRedirect : "/account";
   const { login } = useCustomerAuth();
   const { refreshCart } = useCart();
   const [submitting, setSubmitting] = useState(false);
@@ -37,8 +38,7 @@ function CustomerLoginInner() {
       await login(values.email, values.password);
       await refreshCart();
       toast.success("Welcome back!");
-      router.replace(redirect);
-      router.refresh();
+      window.location.assign(redirect);
     } catch (err) {
       const mapped = applyApiErrorsToForm(err, setError, ["email", "password"]);
       const message = getApiErrorMessage(err, "Invalid email or password.");
