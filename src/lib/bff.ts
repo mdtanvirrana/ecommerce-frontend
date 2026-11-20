@@ -10,6 +10,7 @@ export const ADMIN_COOKIE = "shop_admin_token";
 
 const SHOULD_USE_SECURE_COOKIE =
   process.env.COOKIE_SECURE === "true" ||
+  process.env.VERCEL === "1" ||
   (process.env.NODE_ENV === "production" &&
     Boolean(process.env.NEXT_PUBLIC_APP_URL?.startsWith("https://")));
 

@@ -19,7 +19,7 @@ type RegisterValues = z.infer<typeof registerSchema>;
 function CustomerRegisterInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect") || "/";
+  const redirect = searchParams.get("redirect") || "/account";
   const { register: registerCustomer } = useCustomerAuth();
   const { refreshCart } = useCart();
   const [submitting, setSubmitting] = useState(false);
@@ -37,7 +37,8 @@ function CustomerRegisterInner() {
       await registerCustomer(values);
       await refreshCart();
       toast.success("Account created! Welcome to SHOP.CO.");
-      router.push(redirect);
+      router.replace(redirect);
+      router.refresh();
     } catch (err) {
       applyApiErrorsToForm(err, setError, [
         "name",

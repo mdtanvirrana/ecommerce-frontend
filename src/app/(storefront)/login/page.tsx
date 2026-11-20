@@ -19,7 +19,7 @@ type LoginValues = z.infer<typeof loginSchema>;
 function CustomerLoginInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect") || "/";
+  const redirect = searchParams.get("redirect") || "/account";
   const { login } = useCustomerAuth();
   const { refreshCart } = useCart();
   const [submitting, setSubmitting] = useState(false);
@@ -37,7 +37,8 @@ function CustomerLoginInner() {
       await login(values.email, values.password);
       await refreshCart();
       toast.success("Welcome back!");
-      router.push(redirect);
+      router.replace(redirect);
+      router.refresh();
     } catch (err) {
       const mapped = applyApiErrorsToForm(err, setError, ["email", "password"]);
       const message = getApiErrorMessage(err, "Invalid email or password.");
