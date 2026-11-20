@@ -27,6 +27,15 @@ import { getApiErrorMessage } from "@/lib/formErrors";
 import { formatDateTime, formatExactMoney } from "@/lib/utils";
 import type { OrderStatus, PaymentStatus } from "@/types/api";
 
+const ORDER_STATUS_SEQUENCE: OrderStatus[] = [
+  "pending",
+  "paid",
+  "processing",
+  "shipped",
+  "delivered",
+  "cancelled",
+];
+
 const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   pending: "Pending",
   paid: "Paid",
@@ -74,18 +83,33 @@ export default function AdminOrderDetailPage() {
   const currentOrderStatus = selectedOrderStatus ?? order?.status ?? "pending";
   const currentPaymentStatus = selectedPaymentStatus ?? order?.payment_status ?? "pending";
 
-  const orderStatusOptions = useMemo(() => {
-    if (!order) return {};
-    const map: Record<string, string> = {
-      [order.status]: `${ORDER_STATUS_LABELS[order.status]} (Current)`,
-    };
-    for (const next of order.allowed_transitions) {
-      if (next === "cancelled" && !canCancel) continue;
-      if (next === "paid" && order.payment_status !== "succeeded") continue;
-      map[next] = ORDER_STATUS_LABELS[next];
-    }
-    return map;
+  const orderStatusItems = useMemo(() => {
+    if (!order) return [];
+    const allowed = new Set<OrderStatus>(order.allowed_transitions);
+    return ORDER_STATUS_SEQUENCE.map((st) => {
+      const isCurrent = st === order.status;
+      const requiresPaid =
+        st === "paid" || st === "processing" || st === "shipped" || st === "delivered";
+      const missingPayment = requiresPaid && order.payment_status !== "succeeded";
+      const missingCancelPerm = st === "cancelled" && !canCancel;
+      const canSelect = isCurrent || (allowed.has(st) && !missingPayment && !missingCancelPerm);
+
+      let suffix = "";
+      if (isCurrent) suffix = " (Current)";
+      else if (missingPayment && allowed.has(st)) suffix = " — Requires Paid";
+
+      return {
+        value: st,
+        label: `${ORDER_STATUS_LABELS[st]}${suffix}`,
+        disabled: !canSelect,
+      };
+    });
   }, [order, canCancel]);
+
+  const orderStatusMap = useMemo(
+    () => Object.fromEntries(orderStatusItems.map((i) => [i.value, i.label])),
+    [orderStatusItems],
+  );
 
   const invalidateOrderQueries = async () => {
     await refetch();
@@ -189,11 +213,23 @@ export default function AdminOrderDetailPage() {
     return <Card className="p-8 text-center">Order not found.</Card>;
   }
 
-  const forwardTransitions = order.allowed_transitions.filter(
-    (s) => s !== "cancelled" && !(s === "paid" && order.payment_status !== "succeeded"),
-  );
+  // Show immediate next forward step in header bar (all valid forward steps including Shipped & Delivered are selectable in the status dropdown)
+  const immediateNextStatus: OrderStatus | null =
+    order.payment_status === "succeeded"
+      ? order.status === "pending"
+        ? "paid"
+        : order.status === "paid"
+          ? "processing"
+          : order.status === "processing"
+            ? "shipped"
+            : order.status === "shipped"
+              ? "delivered"
+              : null
+      : null;
 
-  const hasNextOrderChoices = Object.keys(orderStatusOptions).length > 1;
+  const hasNextOrderChoices = orderStatusItems.some(
+    (item) => !item.disabled && item.value !== order.status,
+  );
 
   return (
     <div className="space-y-6">
@@ -222,17 +258,15 @@ export default function AdminOrderDetailPage() {
 
         {/* Quick 1-click fulfillment buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          {canUpdateStatus &&
-            forwardTransitions.map((next) => (
-              <Button
-                key={next}
-                disabled={updatingOrder || updatingPayment}
-                onClick={() => handleTransition(next)}
-                className="capitalize"
-              >
-                Mark as {next}
-              </Button>
-            ))}
+          {canUpdateStatus && immediateNextStatus && (
+            <Button
+              disabled={updatingOrder || updatingPayment}
+              onClick={() => handleTransition(immediateNextStatus)}
+              className="capitalize"
+            >
+              Mark as {immediateNextStatus}
+            </Button>
+          )}
 
           {canCancel && order.is_cancellable && (
             <Button
@@ -328,8 +362,8 @@ export default function AdminOrderDetailPage() {
                     </Label>
                     <Select
                       value={currentOrderStatus}
-                      items={orderStatusOptions}
-                      disabled={!hasNextOrderChoices || updatingOrder}
+                      items={orderStatusMap}
+                      disabled={updatingOrder}
                       onValueChange={(value) => {
                         if (value) {
                           setSelectedOrderStatus(value as OrderStatus);
@@ -339,14 +373,14 @@ export default function AdminOrderDetailPage() {
                     >
                       <SelectTrigger aria-label="Order status selector" className="w-full">
                         <SelectValue>
-                          {orderStatusOptions[currentOrderStatus] ??
+                          {orderStatusMap[currentOrderStatus] ??
                             ORDER_STATUS_LABELS[currentOrderStatus]}
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        {Object.entries(orderStatusOptions).map(([val, label]) => (
-                          <SelectItem key={val} value={val}>
-                            {label}
+                        {orderStatusItems.map((item) => (
+                          <SelectItem key={item.value} value={item.value} disabled={item.disabled}>
+                            {item.label}
                           </SelectItem>
                         ))}
                       </SelectContent>

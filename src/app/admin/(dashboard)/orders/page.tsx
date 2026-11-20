@@ -51,6 +51,15 @@ const ORDER_STATUS_OPTIONS: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
+const ORDER_STATUS_SEQUENCE: OrderStatus[] = [
+  "pending",
+  "paid",
+  "processing",
+  "shipped",
+  "delivered",
+  "cancelled",
+];
+
 const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   pending: "Pending",
   paid: "Paid",
@@ -122,30 +131,43 @@ export default function AdminOrdersPage() {
     setModalError(null);
   };
 
-  // Compute valid order status choices dynamically (including transitions unlocked if marking payment succeeded)
-  const modalOrderStatusOptions = useMemo(() => {
-    if (!editingOrder) return {};
-    const options: Record<string, string> = {
-      [editingOrder.status]: `${ORDER_STATUS_LABELS[editingOrder.status]} (Current)`,
-    };
+  // Show all 6 lifecycle statuses (Pending, Paid, Processing, Shipped, Delivered, Cancelled)
+  // while clearly disabling invalid backward/unpaid transitions.
+  const modalOrderStatusItems = useMemo(() => {
+    if (!editingOrder) return [];
 
-    const transitions = new Set<OrderStatus>(editingOrder.allowed_transitions);
-    if (
-      editingOrder.status === "pending" &&
-      draftPaymentStatus === "succeeded"
-    ) {
-      transitions.add("paid");
-      transitions.add("processing");
+    const allowed = new Set<OrderStatus>(editingOrder.allowed_transitions);
+    if (editingOrder.status === "pending" && draftPaymentStatus === "succeeded") {
+      allowed.add("paid");
+      allowed.add("processing");
+      allowed.add("shipped");
+      allowed.add("delivered");
     }
 
-    for (const t of transitions) {
-      if (t === "cancelled" && !canCancel) continue;
-      if (t === "paid" && draftPaymentStatus !== "succeeded") continue;
-      options[t] = ORDER_STATUS_LABELS[t];
-    }
+    return ORDER_STATUS_SEQUENCE.map((st) => {
+      const isCurrent = st === editingOrder.status;
+      const requiresPaid =
+        st === "paid" || st === "processing" || st === "shipped" || st === "delivered";
+      const missingPayment = requiresPaid && draftPaymentStatus !== "succeeded";
+      const missingCancelPerm = st === "cancelled" && !canCancel;
+      const canSelect = isCurrent || (allowed.has(st) && !missingPayment && !missingCancelPerm);
 
-    return options;
+      let suffix = "";
+      if (isCurrent) suffix = " (Current)";
+      else if (missingPayment && allowed.has(st)) suffix = " — Requires Paid";
+
+      return {
+        value: st,
+        label: `${ORDER_STATUS_LABELS[st]}${suffix}`,
+        disabled: !canSelect,
+      };
+    });
   }, [editingOrder, draftPaymentStatus, canCancel]);
+
+  const modalOrderStatusMap = useMemo(
+    () => Object.fromEntries(modalOrderStatusItems.map((i) => [i.value, i.label])),
+    [modalOrderStatusItems],
+  );
 
   const handleSaveStatuses = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -412,6 +434,12 @@ export default function AdminOrdersPage() {
                       draftOrderStatus === "pending"
                     ) {
                       setDraftOrderStatus("paid");
+                    } else if (
+                      nextPay !== "succeeded" &&
+                      editingOrder?.status === "pending" &&
+                      ["paid", "processing", "shipped", "delivered"].includes(draftOrderStatus)
+                    ) {
+                      setDraftOrderStatus("pending");
                     }
                     setModalError(null);
                   }
@@ -434,7 +462,7 @@ export default function AdminOrdersPage() {
               <Label>Order Status</Label>
               <Select
                 value={draftOrderStatus}
-                items={modalOrderStatusOptions}
+                items={modalOrderStatusMap}
                 onValueChange={(value) => {
                   if (value) {
                     setDraftOrderStatus(value as OrderStatus);
@@ -444,14 +472,14 @@ export default function AdminOrdersPage() {
               >
                 <SelectTrigger aria-label="Select order status" className="w-full">
                   <SelectValue>
-                    {modalOrderStatusOptions[draftOrderStatus] ??
+                    {modalOrderStatusMap[draftOrderStatus] ??
                       ORDER_STATUS_LABELS[draftOrderStatus]}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(modalOrderStatusOptions).map(([val, label]) => (
-                    <SelectItem key={val} value={val}>
-                      {label}
+                  {modalOrderStatusItems.map((item) => (
+                    <SelectItem key={item.value} value={item.value} disabled={item.disabled}>
+                      {item.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
