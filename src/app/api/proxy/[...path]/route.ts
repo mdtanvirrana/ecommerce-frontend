@@ -63,6 +63,19 @@ async function proxyRequest(
 
     const response = NextResponse.json(payload, { status: upstream.status });
 
+    const upstreamCacheControl = upstream.headers.get("cache-control");
+    if (
+      request.method === "GET" &&
+      !isAdminPath &&
+      !token &&
+      upstream.ok &&
+      upstreamCacheControl?.includes("public")
+    ) {
+      response.headers.set("Cache-Control", upstreamCacheControl);
+    } else {
+      response.headers.set("Cache-Control", "no-store");
+    }
+
     if (upstream.status === 401 && (joinedPath === "me" || joinedPath === "admin/me")) {
       clearAuthCookie(response, cookieName);
     }

@@ -2,7 +2,7 @@ import React, { Suspense } from "react";
 import { CatalogListingView } from "@/features/catalog/CatalogListingView";
 import { serverCatalog } from "@/lib/serverCatalog";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 30;
 
 export default async function ShopPage() {
   const [products, categories] = await Promise.all([

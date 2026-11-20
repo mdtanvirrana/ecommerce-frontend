@@ -2,7 +2,7 @@ import React from "react";
 import { HomeView } from "@/features/home/HomeView";
 import { serverCatalog } from "@/lib/serverCatalog";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 30;
 
 export default async function HomePage() {
   const [newArrivals, topSelling, categories, featuredReviews] = await Promise.all([

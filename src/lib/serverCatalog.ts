@@ -5,7 +5,8 @@ async function serverFetchJson<T>(path: string): Promise<ApiResponse<T> | null> 
   try {
     const res = await fetch(`${BACKEND_API_URL}/${path.replace(/^\//, "")}`, {
       headers: { Accept: "application/json" },
-      cache: "no-store",
+      next: { revalidate: 30 },
+      signal: AbortSignal.timeout(12000),
     });
     if (!res.ok) return null;
     return (await res.json()) as ApiResponse<T>;
