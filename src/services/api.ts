@@ -9,6 +9,7 @@ import type {
   DashboardData,
   Order,
   OrderStatus,
+  PaymentStatus,
   Permission,
   Product,
   ProductDetailPayload,
@@ -334,6 +335,12 @@ export const adminApi = {
     apiRequest<Order>(`admin/orders/${id}/status`, {
       method: "PATCH",
       body: { status, reason },
+    }),
+
+  updateOrderPaymentStatus: (id: number, payment_status: PaymentStatus, note?: string) =>
+    apiRequest<Order>(`admin/orders/${id}/payment-status`, {
+      method: "PATCH",
+      body: { payment_status, note },
     }),
 
   cancelOrder: (id: number, reason?: string) =>

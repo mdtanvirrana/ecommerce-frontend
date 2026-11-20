@@ -1,30 +1,66 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Ban } from "lucide-react";
+import { ArrowLeft, Ban, CreditCard, PackageCheck } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/services/api";
 import { useAdminAuth } from "@/providers/AdminAuthProvider";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { OrderStatusBadge, PaymentStatusBadge } from "@/components/shared/StatusBadge";
 import { getApiErrorMessage } from "@/lib/formErrors";
 import { formatDateTime, formatExactMoney } from "@/lib/utils";
-import type { OrderStatus } from "@/types/api";
+import type { OrderStatus, PaymentStatus } from "@/types/api";
+
+const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
+  pending: "Pending",
+  paid: "Paid",
+  processing: "Processing",
+  shipped: "Shipped",
+  delivered: "Delivered",
+  cancelled: "Cancelled",
+};
+
+const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
+  pending: "Pending",
+  succeeded: "Succeeded (Paid)",
+  failed: "Failed",
+  cancelled: "Cancelled",
+  refunded: "Refunded",
+  needs_resolution: "Needs Resolution",
+};
 
 export default function AdminOrderDetailPage() {
   const params = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const { hasPermission } = useAdminAuth();
+  const canUpdateStatus = hasPermission("orders.update_status");
+  const canCancel = hasPermission("orders.cancel");
 
-  const [updating, setUpdating] = useState(false);
+  const [updatingOrder, setUpdatingOrder] = useState(false);
+  const [updatingPayment, setUpdatingPayment] = useState(false);
+  const [selectedOrderStatus, setSelectedOrderStatus] = useState<OrderStatus | null>(null);
+  const [orderStatusError, setOrderStatusError] = useState<string | null>(null);
+
+  const [selectedPaymentStatus, setSelectedPaymentStatus] = useState<PaymentStatus | null>(null);
+  const [paymentNote, setPaymentNote] = useState("");
+  const [paymentStatusError, setPaymentStatusError] = useState<string | null>(null);
+
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -35,18 +71,83 @@ export default function AdminOrderDetailPage() {
   });
   const order = data?.data;
 
+  const currentOrderStatus = selectedOrderStatus ?? order?.status ?? "pending";
+  const currentPaymentStatus = selectedPaymentStatus ?? order?.payment_status ?? "pending";
+
+  const orderStatusOptions = useMemo(() => {
+    if (!order) return {};
+    const map: Record<string, string> = {
+      [order.status]: `${ORDER_STATUS_LABELS[order.status]} (Current)`,
+    };
+    for (const next of order.allowed_transitions) {
+      if (next === "cancelled" && !canCancel) continue;
+      if (next === "paid" && order.payment_status !== "succeeded") continue;
+      map[next] = ORDER_STATUS_LABELS[next];
+    }
+    return map;
+  }, [order, canCancel]);
+
+  const invalidateOrderQueries = async () => {
+    await refetch();
+    await queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
+    await queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
+  };
+
   const handleTransition = async (nextStatus: OrderStatus) => {
     if (!order) return;
-    setUpdating(true);
+    if (nextStatus === "cancelled") {
+      setCancelError(null);
+      setCancelOpen(true);
+      return;
+    }
+    if (nextStatus === order.status) {
+      setOrderStatusError("Select a different status to update.");
+      return;
+    }
+
+    setOrderStatusError(null);
+    setUpdatingOrder(true);
     try {
       await adminApi.updateOrderStatus(order.id, nextStatus);
-      toast.success(`Order status updated to ${nextStatus}.`);
-      await refetch();
-      await queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
+      toast.success(`Order status updated to ${ORDER_STATUS_LABELS[nextStatus]}.`);
+      setSelectedOrderStatus(null);
+      await invalidateOrderQueries();
     } catch (err) {
-      toast.error(getApiErrorMessage(err, "Failed to update status."));
+      const msg = getApiErrorMessage(err, "Failed to update order status.");
+      setOrderStatusError(msg);
+      toast.error(msg);
     } finally {
-      setUpdating(false);
+      setUpdatingOrder(false);
+    }
+  };
+
+  const handleUpdatePaymentStatus = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order) return;
+    if (currentPaymentStatus === order.payment_status) {
+      setPaymentStatusError("Select a different payment status to update.");
+      return;
+    }
+
+    setPaymentStatusError(null);
+    setUpdatingPayment(true);
+    try {
+      await adminApi.updateOrderPaymentStatus(
+        order.id,
+        currentPaymentStatus,
+        paymentNote.trim() || undefined,
+      );
+      toast.success(`Payment status updated to ${PAYMENT_STATUS_LABELS[currentPaymentStatus]}.`);
+      setSelectedPaymentStatus(null);
+      setSelectedOrderStatus(null);
+      setPaymentNote("");
+      await invalidateOrderQueries();
+    } catch (err) {
+      const msg = getApiErrorMessage(err, "Failed to update payment status.");
+      setPaymentStatusError(msg);
+      toast.error(msg);
+    } finally {
+      setUpdatingPayment(false);
     }
   };
 
@@ -58,20 +159,20 @@ export default function AdminOrderDetailPage() {
       return;
     }
     setCancelError(null);
-    setUpdating(true);
+    setUpdatingOrder(true);
     try {
       await adminApi.cancelOrder(order.id, cancelReason.trim());
       toast.success("Order cancelled and stock restored atomically.");
       setCancelOpen(false);
       setCancelReason("");
-      await refetch();
-      await queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
+      setSelectedOrderStatus(null);
+      await invalidateOrderQueries();
     } catch (err) {
       const msg = getApiErrorMessage(err, "Failed to cancel order.");
       setCancelError(msg);
       toast.error(msg);
     } finally {
-      setUpdating(false);
+      setUpdatingOrder(false);
     }
   };
 
@@ -91,6 +192,8 @@ export default function AdminOrderDetailPage() {
   const forwardTransitions = order.allowed_transitions.filter(
     (s) => s !== "cancelled" && !(s === "paid" && order.payment_status !== "succeeded"),
   );
+
+  const hasNextOrderChoices = Object.keys(orderStatusOptions).length > 1;
 
   return (
     <div className="space-y-6">
@@ -117,13 +220,13 @@ export default function AdminOrderDetailPage() {
           </div>
         </div>
 
-        {/* Permission-gated status lifecycle controls */}
+        {/* Quick 1-click fulfillment buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          {hasPermission("orders.update_status") &&
+          {canUpdateStatus &&
             forwardTransitions.map((next) => (
               <Button
                 key={next}
-                disabled={updating}
+                disabled={updatingOrder || updatingPayment}
                 onClick={() => handleTransition(next)}
                 className="capitalize"
               >
@@ -131,10 +234,10 @@ export default function AdminOrderDetailPage() {
               </Button>
             ))}
 
-          {hasPermission("orders.cancel") && order.is_cancellable && (
+          {canCancel && order.is_cancellable && (
             <Button
               variant="destructive"
-              disabled={updating}
+              disabled={updatingOrder || updatingPayment}
               onClick={() => {
                 setCancelError(null);
                 setCancelOpen(true);
@@ -200,6 +303,151 @@ export default function AdminOrderDetailPage() {
         </Card>
 
         <div className="space-y-6 lg:col-span-4">
+          {/* Order Status & Payment Status Update Card */}
+          {canUpdateStatus && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Update Order &amp; Payment Status</CardTitle>
+                <CardDescription>
+                  Changes are logged and notify the customer by email.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {/* Order Status Form */}
+                <form
+                  noValidate
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void handleTransition(currentOrderStatus);
+                  }}
+                  className="space-y-3"
+                >
+                  <div className="space-y-1.5">
+                    <Label className="inline-flex items-center gap-1.5">
+                      <PackageCheck className="h-3.5 w-3.5 text-muted-foreground" /> Order Status
+                    </Label>
+                    <Select
+                      value={currentOrderStatus}
+                      items={orderStatusOptions}
+                      disabled={!hasNextOrderChoices || updatingOrder}
+                      onValueChange={(value) => {
+                        if (value) {
+                          setSelectedOrderStatus(value as OrderStatus);
+                          setOrderStatusError(null);
+                        }
+                      }}
+                    >
+                      <SelectTrigger aria-label="Order status selector" className="w-full">
+                        <SelectValue>
+                          {orderStatusOptions[currentOrderStatus] ??
+                            ORDER_STATUS_LABELS[currentOrderStatus]}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(orderStatusOptions).map(([val, label]) => (
+                          <SelectItem key={val} value={val}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!hasNextOrderChoices && (
+                      <p className="text-xs text-muted-foreground">
+                        {order.status === "pending" && order.payment_status !== "succeeded"
+                          ? "Mark payment as succeeded below to advance this order to Paid."
+                          : `Order is in terminal "${order.status}" state.`}
+                      </p>
+                    )}
+                    {orderStatusError && (
+                      <p
+                        role="alert"
+                        className="text-xs font-medium text-red-600 dark:text-red-400"
+                      >
+                        {orderStatusError}
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={
+                      !hasNextOrderChoices ||
+                      currentOrderStatus === order.status ||
+                      updatingOrder
+                    }
+                  >
+                    {updatingOrder ? "Updating Order Status..." : "Update Order Status"}
+                  </Button>
+                </form>
+
+                <Separator />
+
+                {/* Payment Status Form */}
+                <form noValidate onSubmit={handleUpdatePaymentStatus} className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label className="inline-flex items-center gap-1.5">
+                      <CreditCard className="h-3.5 w-3.5 text-muted-foreground" /> Payment Status
+                    </Label>
+                    <Select
+                      value={currentPaymentStatus}
+                      items={PAYMENT_STATUS_LABELS}
+                      disabled={updatingPayment}
+                      onValueChange={(value) => {
+                        if (value) {
+                          setSelectedPaymentStatus(value as PaymentStatus);
+                          setPaymentStatusError(null);
+                        }
+                      }}
+                    >
+                      <SelectTrigger aria-label="Payment status selector" className="w-full">
+                        <SelectValue>{PAYMENT_STATUS_LABELS[currentPaymentStatus]}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(PAYMENT_STATUS_LABELS).map(([val, label]) => (
+                          <SelectItem key={val} value={val}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="payment-audit-note">Payment Note (Optional)</Label>
+                    <Input
+                      id="payment-audit-note"
+                      value={paymentNote}
+                      onChange={(e) => {
+                        setPaymentNote(e.target.value);
+                        setPaymentStatusError(null);
+                      }}
+                      placeholder="e.g. Manual bank verification / refund ref"
+                    />
+                    {paymentStatusError && (
+                      <p
+                        role="alert"
+                        className="text-xs font-medium text-red-600 dark:text-red-400"
+                      >
+                        {paymentStatusError}
+                      </p>
+                    )}
+                  </div>
+
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    className="w-full"
+                    disabled={
+                      currentPaymentStatus === order.payment_status || updatingPayment
+                    }
+                  >
+                    {updatingPayment ? "Updating Payment Status..." : "Update Payment Status"}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle>Customer &amp; Shipping</CardTitle>
@@ -240,10 +488,7 @@ export default function AdminOrderDetailPage() {
                 </p>
               )}
               {(order.payments ?? []).map((p) => (
-                <div
-                  key={p.id}
-                  className="mt-2 rounded-lg bg-muted/60 p-3 space-y-1"
-                >
+                <div key={p.id} className="mt-2 rounded-lg bg-muted/60 p-3 space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold uppercase">{p.provider}</span>
                     <PaymentStatusBadge status={p.status} />
@@ -296,8 +541,8 @@ export default function AdminOrderDetailPage() {
               <Button type="button" variant="outline" onClick={() => setCancelOpen(false)}>
                 Keep Order
               </Button>
-              <Button type="submit" variant="destructive" disabled={updating}>
-                {updating ? "Cancelling..." : "Confirm Cancellation"}
+              <Button type="submit" variant="destructive" disabled={updatingOrder}>
+                {updatingOrder ? "Cancelling..." : "Confirm Cancellation"}
               </Button>
             </div>
           </form>

@@ -206,6 +206,14 @@ export type OrderStatus =
   | "delivered"
   | "cancelled";
 
+export type PaymentStatus =
+  | "pending"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "refunded"
+  | "needs_resolution";
+
 export interface Order {
   id: number;
   order_number: string;
@@ -214,7 +222,7 @@ export interface Order {
   status: OrderStatus;
   allowed_transitions: OrderStatus[];
   is_cancellable: boolean;
-  payment_status: "pending" | "succeeded" | "failed" | "cancelled" | "refunded" | "needs_resolution";
+  payment_status: PaymentStatus;
   coupon_code: string | null;
   subtotal: string;
   discount_amount: string;
