@@ -200,8 +200,10 @@ export function CatalogListingView({
   // All subcategories flattened for the top list matching Category Page.jpg
   const subcategories = useMemo(() => {
     const list: Array<{ name: string; slug: string }> = [];
+    if (!Array.isArray(categories)) return list;
     for (const parent of categories) {
-      for (const child of parent.children ?? []) {
+      const children = Array.isArray(parent.children) ? parent.children : [];
+      for (const child of children) {
         list.push({ name: child.name, slug: child.slug });
       }
     }

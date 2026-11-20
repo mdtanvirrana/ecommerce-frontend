@@ -133,7 +133,7 @@ export function StorefrontHeader() {
                       >
                         {cat.name}
                       </Link>
-                      {cat.children && cat.children.length > 0 && (
+                      {Array.isArray(cat.children) && cat.children.length > 0 && (
                         <div className="ml-3 border-l border-black/10 pl-2">
                           {cat.children.map((sub) => (
                             <Link
